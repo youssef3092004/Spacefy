@@ -5,8 +5,8 @@ import {
   deleteAllUsers,
   deleteUserById,
 } from "../Controllers/user.js";
-import { verifyToken } from "../Middleware/auth.js";
-import { cacheMiddleware } from "../Middleware/cache.js";
+import { verifyToken } from "../middleware/auth.js";
+import { cacheMiddleware } from "../middleware/cache.js";
 
 const router = Router();
 

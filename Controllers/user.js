@@ -1,7 +1,7 @@
-import { prisma } from "../Configs/db.js";
-import { AppError } from "../Utils/AppError.js";
-import { pagination } from "../Utils/pagination.js";
-import { redisClient } from "../Configs/redis.js";
+import { prisma } from "../configs/db.js";
+import { AppError } from "../utils/appError.js";
+import { pagination } from "../utils/pagination.js";
+import { redisClient } from "../configs/redis.js";
 
 export const getAllUsers = async (req, res, next) => {
   try {

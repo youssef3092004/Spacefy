@@ -1,4 +1,4 @@
-import { redisClient } from "../Configs/redis.js";
+import { redisClient } from "../configs/redis.js";
 import process from "process";
 
 export const cacheMiddleware = (keyBuilder, type) => {

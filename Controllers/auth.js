@@ -1,4 +1,4 @@
-import { prisma } from "../Configs/db.js";
+import { prisma } from "../configs/db.js";
 import bcrypt from "bcrypt";
 import process from "process";
 import {
@@ -6,8 +6,8 @@ import {
   isValidEmail,
   isValidPassword,
   isValidPhone,
-} from "../Utils/validation.js";
-import { AppError } from "../Utils/AppError.js";
+} from "../utils/validation.js";
+import { AppError } from "../utils/appError.js";
 import jwt from "jsonwebtoken";
 // import crypto from "crypto";
 

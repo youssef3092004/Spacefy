@@ -1,5 +1,5 @@
-import { prisma } from "../Configs/db.js";
-import { AppError } from "../Utils/AppError.js";
+import { prisma } from "../configs/db.js";
+import { AppError } from "../utils/appError.js";
 
 export const authorize = (permission) => {
   return async (req, res, next) => {
