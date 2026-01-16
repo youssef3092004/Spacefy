@@ -26,7 +26,7 @@ app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 
 // Routes
 import authRouter from "../Routes/auth.js";
-import roleRouter from "../Routes/Role.js";
+import roleRouter from "../Routes/role.js";
 import userRouter from "../Routes/user.js";
 
 app.use("/api/v1/auth", authRouter);
