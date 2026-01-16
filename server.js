@@ -1,11 +1,11 @@
 import "dotenv/config";
 import process from "process";
 import express from "express";
-import { connectDB } from "./Configs/db.js";
+import { connectDB } from "./configs/db.js";
 import helmet from "helmet";
 import cors from "cors";
-import { errorHandler } from "./Middleware/errorHandler.js";
-import { connectRedis } from "./Configs/redis.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { connectRedis } from "./configs/redis.js";
 
 const app = express();
 app.use(express.json());
@@ -25,9 +25,9 @@ app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 
 // Routes
-import authRouter from "./Routes/auth.js";
-import roleRouter from "./Routes/role.js";
-import userRouter from "./Routes/user.js";
+import authRouter from "./routes/auth.js";
+import roleRouter from "./routes/role.js";
+import userRouter from "./routes/user.js";
 
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/roles", roleRouter);
