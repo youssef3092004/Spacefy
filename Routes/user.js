@@ -4,7 +4,7 @@ import {
   getUserById,
   deleteAllUsers,
   deleteUserById,
-} from "../Controllers/user.js";
+} from "../controllers/user.js";
 import { verifyToken } from "../middleware/auth.js";
 import { cacheMiddleware } from "../middleware/cache.js";
 
