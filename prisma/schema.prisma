@@ -17,19 +17,22 @@ enum UserRole {
   STAFF
   CUSTOMER
   OWNER
+  DEVELOPER
 }
 
 model User {
-  id        String   @id @default(uuid())
-  roleId    String
-  name      String
-  phone     String   @unique
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(uuid())
+  roleId     String
+  department String?
+  name       String
+  phone      String   @unique
+  email      String   @unique
+  password   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  role Role @relation(fields: [roleId], references: [id])
+  role            Role             @relation(fields: [roleId], references: [id])
+  userPermissions UserPermission[]
 
   @@index([roleId])
 }
@@ -52,10 +55,12 @@ model Permission {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  roles RolePermission[]
+  roles           RolePermission[]
+  userPermissions UserPermission[]
 }
 
 model RolePermission {
+  id           String   @id @default(uuid())
   roleId       String
   permissionId String
   createdAt    DateTime @default(now())
@@ -63,8 +68,18 @@ model RolePermission {
 
   role       Role       @relation(fields: [roleId], references: [id])
   permission Permission @relation(fields: [permissionId], references: [id])
+}
 
-  @@id([roleId, permissionId])
+model UserPermission {
+  id           String   @id @default(uuid())
+  userId       String
+  permissionId String
+  isAllowed    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
 }
 
 model BlacklistedToken {

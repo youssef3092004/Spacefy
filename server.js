@@ -6,6 +6,7 @@ import helmet from "helmet";
 import cors from "cors";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { connectRedis } from "./configs/redis.js";
+import xss from "xss";
 
 const app = express();
 app.use(express.json());
@@ -24,15 +25,32 @@ app.use(cors());
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 
+app.use((req, res, next) => {
+  const sanitize = (obj) => {
+    for (const key in obj) {
+      if (typeof obj[key] === "string") {
+        obj[key] = xss(obj[key]);
+      }
+    }
+  };
+  sanitize(req.body);
+  sanitize(req.query);
+  sanitize(req.params);
+  next();
+});
+
 // Routes
 import authRouter from "./routes/auth.js";
 import roleRouter from "./routes/role.js";
 import userRouter from "./routes/user.js";
+import permissionRouter from "./routes/permission.js";
+import rolePermissionRouter from "./routes/rolePermission.js";
 
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/roles", roleRouter);
 app.use("/api/v1/users", userRouter);
-
+app.use("/api/v1/permissions", permissionRouter);
+app.use("/api/v1/role-permissions", rolePermissionRouter);
 app.get("/", (req, res) => {
   res.send("Welcome to Spacefy API");
 });

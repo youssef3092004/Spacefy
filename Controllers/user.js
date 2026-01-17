@@ -2,19 +2,18 @@ import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
 import { pagination } from "../utils/pagination.js";
 import { redisClient } from "../configs/redis.js";
+import {
+  isValidName,
+  isValidEmail,
+  isValidPassword,
+  isValidPhone,
+} from "../utils/validation.js";
+import bcrypt from "bcrypt";
+import process from "process";
 
 export const getAllUsers = async (req, res, next) => {
   try {
     const { page, limit, skip, sort, order } = pagination(req);
-    const allowedSortFields = ["createdAt", "email"];
-    const allowedOrder = ["asc", "desc"];
-
-    if (!allowedSortFields.includes(sort)) {
-      return next(new AppError("Invalid sort field"));
-    }
-    if (!allowedOrder.includes(order.toLowerCase())) {
-      return next(new AppError("Invalid order, must be 'asc' or 'desc'"));
-    }
 
     const [users, total] = await prisma.$transaction([
       prisma.user.findMany({
@@ -119,6 +118,126 @@ export const deleteAllUsers = async (req, res, next) => {
       status: "success",
       message: "All users deleted successfully",
       count: result.count,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateUserById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return next(new AppError("User ID is required", 400));
+    }
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
+    });
+    if (existingUser === 0) {
+      return next(new AppError("User not found", 404));
+    }
+    const allowedFields = ["name", "phone", "email", "password", "roleId"];
+    const updateData = { ...req.body };
+    if (updateData.password) {
+      if (!isValidPassword(updateData.password)) {
+        return next(
+          new AppError(
+            "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character.",
+            400,
+          ),
+        );
+      }
+      updateData.password = bcrypt.hash(
+        updateData.password,
+        process.env.SALT_ROUNDS,
+      );
+    }
+    if (updateData.email) {
+      if (!isValidEmail(updateData.email)) {
+        return next(new AppError("Invalid email format", 400));
+      }
+      const emailInUse = await prisma.user.findUnique({
+        where: { email: updateData.email },
+      });
+      if (emailInUse && emailInUse.id !== id) {
+        return next(
+          new AppError("Email is already in use by another user", 409),
+        );
+      }
+    }
+    if (updateData.phone) {
+      if (!isValidPhone(updateData.phone)) {
+        return next(new AppError("Invalid phone format", 400));
+      }
+    }
+    if (updateData.name) {
+      if (!isValidName(updateData.name)) {
+        return next(new AppError("Invalid name format", 400));
+      }
+    }
+    const keys = Object.keys(updateData).filter(
+      (key) => !allowedFields.includes(key),
+    );
+    if (keys.length === 0) {
+      return next(new AppError("No valid fields to update", 400));
+    }
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: updateData,
+    });
+    await redisClient.del(`user:${id}`);
+    const cacheKeys = await redisClient.keys("users:*");
+    if (cacheKeys.length > 0) {
+      await redisClient.del(cacheKeys);
+    }
+    res.status(200).json({
+      status: "success",
+      data: updatedUser,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getUserByRoleName = async (req, res, next) => {
+  try {
+    const { roleName } = req.params;
+    if (!roleName) {
+      return next(new AppError("Role name is required", 400));
+    }
+    roleName.capitalize();
+    const { page, limit, skip, sort, order } = pagination(req);
+    const role = await prisma.role.findUnique({
+      where: { name: roleName },
+    });
+    if (!role) {
+      return next(new AppError("Role not found", 404));
+    }
+    const users = await prisma.user.findMany({
+      where: { roleId: role.id },
+      skip,
+      take: limit,
+      orderBy: { [sort]: order },
+    });
+    const total = await prisma.user.count({
+      where: { roleId: role.id },
+    });
+    if (!users.length) {
+      return next(new AppError("No users found for this role", 404));
+    }
+    const totalPages = Math.ceil(total / limit);
+    res.status(200).json({
+      success: true,
+      data: users,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages,
+        sort,
+        order,
+      },
+      source: "database",
     });
   } catch (error) {
     next(error);

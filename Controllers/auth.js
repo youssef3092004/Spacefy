@@ -9,23 +9,21 @@ import {
 } from "../utils/validation.js";
 import { AppError } from "../utils/appError.js";
 import jwt from "jsonwebtoken";
+//! handle it in v2 
 // import crypto from "crypto";
 
-export const register = async (req, res, next) => {
+export const registerOwner = async (req, res, next) => {
   try {
-    const { name, phone, email, password, role } = req.body;
+    const { name, phone, email, password } = req.body;
 
-    const roleId = role || "1f10283e-9ade-48ad-a3a1-80cfd4306d08";
-
-    const requiredFields = { name, phone, email, password, roleId };
-
+    const requiredFields = { name, phone, email, password };
     for (let i in requiredFields) {
       if (!requiredFields[i]) {
         return next(
           new AppError(
             `${i.charAt(0).toUpperCase() + i.slice(1)} is required`,
-            400
-          )
+            400,
+          ),
         );
       }
     }
@@ -42,6 +40,9 @@ export const register = async (req, res, next) => {
     if (!isValidPhone(phone)) {
       return next(new AppError("Invalid phone format", 400));
     }
+
+    const roleId = "9ad537de-b614-4faf-937a-51be5c52cb27";
+
     const existingRole = await prisma.role.findUnique({
       where: { id: roleId },
     });
@@ -54,9 +55,258 @@ export const register = async (req, res, next) => {
     if (existingUser) {
       return next(new AppError("Email already in use", 409));
     }
+
+    const existingPhone = await prisma.user.findUnique({
+      where: { phone },
+    });
+
+    if (existingPhone) {
+      return next(new AppError("Phone number already in use", 409));
+    }
+
     const hashedPassword = await bcrypt.hash(
       password,
-      parseInt(process.env.SALT_ROUNDS)
+      parseInt(process.env.SALT_ROUNDS),
+    );
+
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        phone,
+        email,
+        password: hashedPassword,
+        roleId,
+      },
+    });
+
+    // eslint-disable-next-line no-unused-vars
+    const { password: _, ...userWithoutPassword } = newUser;
+
+    res.status(201).json({
+      status: "success",
+      data: userWithoutPassword,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const registerAdmin = async (req, res, next) => {
+  try {
+    const { name, phone, email, password } = req.body;
+
+    const requiredFields = { name, phone, email, password };
+
+    for (let i in requiredFields) {
+      if (!requiredFields[i]) {
+        return next(
+          new AppError(
+            `${i.charAt(0).toUpperCase() + i.slice(1)} is required`,
+            400,
+          ),
+        );
+      }
+    }
+
+    if (!isValidName(name)) {
+      return next(new AppError("Invalid name format", 400));
+    }
+    if (!isValidEmail(email)) {
+      return next(new AppError("Invalid email format", 400));
+    }
+    if (!isValidPassword(password)) {
+      return next(new AppError("Weak password format", 400));
+    }
+    if (!isValidPhone(phone)) {
+      return next(new AppError("Invalid phone format", 400));
+    }
+
+    const roleId = "bd051127-e101-487b-8d65-9a71035c9e4c";
+
+    const existingRole = await prisma.role.findUnique({
+      where: { id: roleId },
+    });
+    if (!existingRole) {
+      return next(new AppError("Role does not exist", 400));
+    }
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+    if (existingUser) {
+      return next(new AppError("Email already in use", 409));
+    }
+
+    const existingPhone = await prisma.user.findUnique({
+      where: { phone },
+    });
+
+    if (existingPhone) {
+      return next(new AppError("Phone number already in use", 409));
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      password,
+      parseInt(process.env.SALT_ROUNDS),
+    );
+
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        phone,
+        email,
+        password: hashedPassword,
+        roleId,
+      },
+    });
+
+    // eslint-disable-next-line no-unused-vars
+    const { password: _, ...userWithoutPassword } = newUser;
+
+    res.status(201).json({
+      status: "success",
+      data: userWithoutPassword,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const registerStaff = async (req, res, next) => {
+  try {
+    const { name, phone, email, password } = req.body;
+
+    const requiredFields = { name, phone, email, password };
+
+    for (let i in requiredFields) {
+      if (!requiredFields[i]) {
+        return next(
+          new AppError(
+            `${i.charAt(0).toUpperCase() + i.slice(1)} is required`,
+            400,
+          ),
+        );
+      }
+    }
+
+    if (!isValidName(name)) {
+      return next(new AppError("Invalid name format", 400));
+    }
+    if (!isValidEmail(email)) {
+      return next(new AppError("Invalid email format", 400));
+    }
+    if (!isValidPassword(password)) {
+      return next(new AppError("Weak password format", 400));
+    }
+    if (!isValidPhone(phone)) {
+      return next(new AppError("Invalid phone format", 400));
+    }
+
+    const roleId = "2884d176-7c61-4b09-81d2-d6d7269d4ad1";
+
+    const existingRole = await prisma.role.findUnique({
+      where: { id: roleId },
+    });
+    if (!existingRole) {
+      return next(new AppError("Role does not exist", 400));
+    }
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+    if (existingUser) {
+      return next(new AppError("Email already in use", 409));
+    }
+
+    const existingPhone = await prisma.user.findUnique({
+      where: { phone },
+    });
+
+    if (existingPhone) {
+      return next(new AppError("Phone number already in use", 409));
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      password,
+      parseInt(process.env.SALT_ROUNDS),
+    );
+
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        phone,
+        email,
+        password: hashedPassword,
+        roleId,
+      },
+    });
+
+    // eslint-disable-next-line no-unused-vars
+    const { password: _, ...userWithoutPassword } = newUser;
+
+    res.status(201).json({
+      status: "success",
+      data: userWithoutPassword,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const registerDeveloper = async (req, res, next) => {
+  try {
+    const { name, phone, email, password } = req.body;
+
+    const requiredFields = { name, phone, email, password };
+
+    for (let i in requiredFields) {
+      if (!requiredFields[i]) {
+        return next(
+          new AppError(
+            `${i.charAt(0).toUpperCase() + i.slice(1)} is required`,
+            400,
+          ),
+        );
+      }
+    }
+
+    if (!isValidName(name)) {
+      return next(new AppError("Invalid name format", 400));
+    }
+    if (!isValidEmail(email)) {
+      return next(new AppError("Invalid email format", 400));
+    }
+    if (!isValidPassword(password)) {
+      return next(new AppError("Weak password format", 400));
+    }
+    if (!isValidPhone(phone)) {
+      return next(new AppError("Invalid phone format", 400));
+    }
+
+    const roleId = "022f21b0-c85d-4920-9cbb-34e2b7689666";
+
+    const existingRole = await prisma.role.findUnique({
+      where: { id: roleId },
+    });
+    if (!existingRole) {
+      return next(new AppError("Role does not exist", 400));
+    }
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+    if (existingUser) {
+      return next(new AppError("Email already in use", 409));
+    }
+
+    const existingPhone = await prisma.user.findUnique({
+      where: { phone },
+    });
+
+    if (existingPhone) {
+      return next(new AppError("Phone number already in use", 409));
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      password,
+      parseInt(process.env.SALT_ROUNDS),
     );
 
     const newUser = await prisma.user.create({
@@ -90,8 +340,8 @@ export const login = async (req, res, next) => {
         return next(
           new AppError(
             `${i.charAt(0).toUpperCase() + i.slice(1)} is required`,
-            400
-          )
+            400,
+          ),
         );
       }
     }
@@ -120,7 +370,7 @@ export const login = async (req, res, next) => {
         roles: roleName.name,
       },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      { expiresIn: process.env.JWT_EXPIRES_IN },
     );
 
     res.status(200).json({

@@ -17,14 +17,13 @@ export const cacheMiddleware = (keyBuilder, type) => {
       const originalJson = res.json.bind(res);
 
       res.json = (body) => {
-        // Get TTL from env dynamically
         const ttlEnvKey = `TTL_${type}`;
         const ttl = parseInt(process.env[ttlEnvKey]);
 
         if (ttl) {
           redisClient.setEx(key, ttl, JSON.stringify(body));
         } else {
-          redisClient.set(key, JSON.stringify(body)); // no TTL
+          redisClient.set(key, JSON.stringify(body));
         }
 
         return originalJson(body);

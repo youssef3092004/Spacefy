@@ -24,12 +24,15 @@ export const verifyToken = async (req, res, next) => {
       return next(new AppError("Authorization denied: Token is Expired", 401));
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded) {
-      return next(new AppError("Invalid token", 401));
-    }
     req.user = decoded;
     next();
   } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return next(new AppError("Token expired, please login again", 401));
+    }
+    if (err.name === "JsonWebTokenError") {
+      return next(new AppError("Invalid token", 401));
+    }
     next(err);
   }
 };
