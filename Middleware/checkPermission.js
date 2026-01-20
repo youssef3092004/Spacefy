@@ -6,7 +6,12 @@ export const checkPermission = (permissionName) => {
   return async (req, res, next) => {
     try {
       if (!req.user || !req.user.roleId) {
-        return next(new AppError("Unauthorized: You must be logged in to access this resource  ", 401));
+        return next(
+          new AppError(
+            "Unauthorized: You must be logged in to access this resource",
+            401,
+          ),
+        );
       }
 
       const { id: userId, roleId } = req.user;

@@ -21,20 +21,43 @@ enum UserRole {
 }
 
 model User {
-  id         String   @id @default(uuid())
-  roleId     String
-  department String?
-  name       String
-  phone      String   @unique
-  email      String   @unique
-  password   String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  roleId    String
+  name      String
+  phone     String   @unique
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   role            Role             @relation(fields: [roleId], references: [id])
   userPermissions UserPermission[]
+  businesses      Business[]
+  staffProfile    staffProfile?
 
   @@index([roleId])
+}
+
+model staffProfile {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  branchId     String
+  baseSalary   Float
+  hireDate     DateTime
+  position     String
+  department   String?
+  profileImage String?  @default("https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png")
+  nationalId   Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
+  @@index([position])
+  @@index([department])
 }
 
 model Role {
@@ -80,6 +103,46 @@ model UserPermission {
 
   user       User       @relation(fields: [userId], references: [id])
   permission Permission @relation(fields: [permissionId], references: [id])
+}
+
+model Business {
+  id        String   @id @default(uuid())
+  name      String
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // branches      Branch[]
+  // subscriptions Subscription[]
+  branches Branch[]
+
+  @@index([ownerId])
+}
+
+model Branch {
+  id         String   @id @default(uuid())
+  // planId     String
+  businessId String
+  name       String
+  address    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  // plan     Plan     @relation(fields: [planId], references: [id])
+
+  // spaces        Space[]
+  // devices       Device[]
+  // tools         Tool[]
+  // visits        Visit[]
+  // staffProfiles StaffProfile[]
+  // revenues      Revenue[]
+  // expenses      Expense[]
+  staffProfiles staffProfile[]
+
+  // @@index([planId])
+  @@index([businessId])
 }
 
 model BlacklistedToken {

@@ -17,7 +17,7 @@ export const cacheMiddleware = (keyBuilder, type) => {
       const originalJson = res.json.bind(res);
 
       res.json = (body) => {
-        const ttlEnvKey = `TTL_${type}`;
+        const ttlEnvKey = `${type}`;
         const ttl = parseInt(process.env[ttlEnvKey]);
 
         if (ttl) {

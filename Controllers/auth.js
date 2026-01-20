@@ -9,7 +9,8 @@ import {
 } from "../utils/validation.js";
 import { AppError } from "../utils/appError.js";
 import jwt from "jsonwebtoken";
-//! handle it in v2 
+import { messages } from "../locales/message.js";
+//! handle it in v2
 // import crypto from "crypto";
 
 export const registerOwner = async (req, res, next) => {
@@ -410,3 +411,64 @@ export const logout = async (req, res, next) => {
     next(error);
   }
 };
+
+export const forgetPassword = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+    if (userId !== id) {
+      return next(new AppError(messages.UNAUTHORIZED, 403));
+    }
+    const user = await prisma.user.findUnique({
+      where: { id },
+    });
+    if (!user) {
+      return next(new AppError(messages.USER_NOT_FOUND, 404));
+    }
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password,
+    );
+    if (!isPasswordValid) {
+      return next(new AppError("Current password is incorrect", 401));
+    }
+    if (!isValidPassword(newPassword)) {
+      return next(new AppError("Weak password format", 400));
+    }
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      parseInt(process.env.SALT_ROUNDS),
+    );
+    await prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+    });
+    res.status(200).json({
+      status: "success",
+      message: messages.PASSWORD_CHANGED,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// export const resetPassword = async (req, res, next) => {
+//   try {
+//     const { email, newPassword } = req.body;
+//     if (!isValidEmail(email)) {
+//       return next(new AppError(messages.INVALID_EMAIL, 400));
+//     }
+//     if (!isValidPassword(newPassword)) {
+//       return next(new AppError(messages.WEAK_PASSWORD, 400));
+//     }
+//     const user = await prisma.user.findUnique({
+//       where: { email },
+//     });
+//     if (!user) {
+//       return next(new AppError(messages.EMAIL_NOT_FOUND, 404));
+//     }
+//   } catch (error) {
+//     next(error);
+//   }
+// };

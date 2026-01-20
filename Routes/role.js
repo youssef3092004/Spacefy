@@ -40,6 +40,10 @@ router.put(
   cacheMiddleware((req) => `role:${req.params.id}`, "TTL_BY_ID"),
   updateRole,
 );
-router.delete("/deleteById/:id", verifyToken, deleteRoleById);
-
+router.delete(
+  "/deleteById/:id",
+  verifyToken,
+  checkPermission("DELETE-ROLES"),
+  deleteRoleById,
+);
 export default router;

@@ -20,6 +20,9 @@ export const getAllUsers = async (req, res, next) => {
         skip,
         take: limit,
         orderBy: { [sort]: order },
+        include: {
+          role: { select: { id: true, name: true } },
+        },
       }),
       prisma.user.count(),
     ]);
@@ -57,6 +60,9 @@ export const getUserById = async (req, res, next) => {
 
     const user = await prisma.user.findUnique({
       where: { id },
+      include: {
+        role: { id: true, name: true },
+      },
     });
 
     if (!user) {
@@ -184,6 +190,9 @@ export const updateUserById = async (req, res, next) => {
     const updatedUser = await prisma.user.update({
       where: { id },
       data: updateData,
+      include: {
+        role: { id: true, name: true },
+      },
     });
     await redisClient.del(`user:${id}`);
     const cacheKeys = await redisClient.keys("users:*");
@@ -201,11 +210,11 @@ export const updateUserById = async (req, res, next) => {
 
 export const getUserByRoleName = async (req, res, next) => {
   try {
-    const { roleName } = req.params;
+    let { roleName } = req.params;
     if (!roleName) {
       return next(new AppError("Role name is required", 400));
     }
-    roleName.capitalize();
+    roleName = String(roleName).toUpperCase();
     const { page, limit, skip, sort, order } = pagination(req);
     const role = await prisma.role.findUnique({
       where: { name: roleName },
