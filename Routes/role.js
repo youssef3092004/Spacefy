@@ -12,7 +12,12 @@ import { checkPermission } from "../middleware/checkPermission.js";
 
 const router = Router();
 
-router.post("/create", createRole);
+router.post(
+  "/create",
+  verifyToken,
+  checkPermission("CREATE-ROLES"),
+  createRole,
+);
 router.get(
   "/getAll",
   verifyToken,

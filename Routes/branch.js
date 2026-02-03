@@ -5,12 +5,15 @@ import {
   getBranchById,
   getBranchesByBusinessId,
   updateBranchById,
+  updateBranchByIdPatch,
   deleteBranchById,
   deleteAllBranches,
 } from "../controllers/branch.js";
 import { verifyToken } from "../middleware/auth.js";
 import { cacheMiddleware } from "../middleware/cache.js";
 import { checkPermission } from "../middleware/checkPermission.js";
+import { upload } from "../middleware/multer.js";
+import { checkOwnership } from "../middleware/checkOwnership.js";
 
 const router = Router();
 
@@ -18,7 +21,34 @@ router.post(
   "/create",
   verifyToken,
   checkPermission("CREATE-BRANCHES"),
+  upload.single("image"),
   createBranch,
+);
+
+router.put(
+  "/update/:branchId",
+  verifyToken,
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
+  checkPermission("UPDATE-BRANCHES", true),
+  upload.single("image"),
+  updateBranchById,
+);
+
+router.patch(
+  "/update/:branchId",
+  verifyToken,
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
+  checkPermission("UPDATE-BRANCHES", true),
+  upload.single("image"),
+  updateBranchByIdPatch,
+);
+
+router.delete(
+  "/delete/:branchId",
+  verifyToken,
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
+  checkPermission("DELETE-BRANCHES", true),
+  deleteBranchById,
 );
 router.get(
   "/getAll",
@@ -34,14 +64,16 @@ router.get(
   getAllBranches,
 );
 router.get(
-  "/getById/:id",
+  "/getById/:branchId",
   verifyToken,
-  checkPermission("VIEW-BRANCHES"),
-  cacheMiddleware((req) => `branch:${req.params.id}`, "TTL_BY_ID"),
+  checkPermission("VIEW-BRANCHES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
+  cacheMiddleware((req) => `branch:${req.params.branchId}`, "TTL_BY_ID"),
   getBranchById,
 );
+
 router.get(
-  "/getByBusinessId/:businessId",
+  "/business/:businessId",
   verifyToken,
   checkPermission("VIEW-BRANCHES"),
   cacheMiddleware(
@@ -50,18 +82,7 @@ router.get(
   ),
   getBranchesByBusinessId,
 );
-router.put(
-  "/update/:id",
-  verifyToken,
-  checkPermission("UPDATE-BRANCHES"),
-  updateBranchById,
-);
-router.delete(
-  "/deleteById/:id",
-  verifyToken,
-  checkPermission("DELETE-BRANCHES"),
-  deleteBranchById,
-);
+
 router.delete(
   "/deleteAll",
   verifyToken,

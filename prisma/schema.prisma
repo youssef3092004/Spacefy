@@ -20,44 +20,168 @@ enum UserRole {
   DEVELOPER
 }
 
-model User {
-  id        String   @id @default(uuid())
-  roleId    String
-  name      String
-  phone     String   @unique
-  email     String   @unique
-  password  String
+enum PaymentMethod {
+  CASH
+  BANK
+  INSTAPAY
+  CARD
+}
+
+enum ApprovalSource {
+  SYSTEM
+  USER
+}
+
+enum PayrollStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+}
+
+enum Language {
+  EN
+  AR
+}
+
+enum SpaceType {
+  PRIVATE
+  PUBLIC
+  DESK
+  MEETING
+  VIP
+  OTHER
+}
+
+enum DeviceType {
+  PC
+  LAPTOP
+  PS4_2
+  PS4_4
+  PS5_2
+  PS5_4
+  XBOX_ONE
+  XBOX_SERIES_S
+  XBOX_SERIES_X
+  NINTENDO_SWITCH
+  VR_HEADSET
+  SIMULATOR
+  TV
+  PROJECTOR
+  TABLET
+  SMART_BOARD
+  SOUND_SYSTEM
+  CAMERA
+  MICROPHONE
+  OTHER
+}
+
+// fix it to branch not business
+model BusinessSettings {
+  id         String @id @default(uuid())
+  businessId String @unique
+
+  defaultLanguage      Language @default(EN)
+  notificationsEnabled Boolean  @default(true)
+  autoApprovePayroll   Boolean  @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  role            Role             @relation(fields: [roleId], references: [id])
-  userPermissions UserPermission[]
-  businesses      Business[]
-  staffProfile    staffProfile?
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id           String   @id @default(uuid())
+  roleId       String
+  name         String
+  phone        String   @unique
+  email        String   @unique
+  password     String
+  profileImage String?  @default("https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  role                  Role                   @relation(fields: [roleId], references: [id])
+  userPermissions       UserPermission[]
+  businesses            Business[]
+  staffProfile          StaffProfile?
+  payrolls              Payroll[]
+  BranchUserPermissions BranchUserPermission[]
 
   @@index([roleId])
 }
 
-model staffProfile {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  branchId     String
-  baseSalary   Float
-  hireDate     DateTime
-  position     String
-  department   String?
-  profileImage String?  @default("https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png")
-  nationalId   Json
+model StaffProfile {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  branchId   String
+  baseSalary Float
+  hireDate   DateTime
+  position   String
+  department String?
+  nationalId Json
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch   Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  payrolls Payroll[]
 
   @@index([branchId])
   @@index([position])
   @@index([department])
+}
+
+model BranchUserPermission {
+  id           String   @id @default(uuid())
+  branchId     String
+  userId       String
+  permissionId String
+  isAllowed    Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  branch     Branch     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, userId, permissionId])
+  @@index([isAllowed])
+  @@index([branchId])
+  @@index([userId])
+  @@index([permissionId])
+}
+
+model Payroll {
+  id             String @id @default(uuid())
+  staffProfileId String
+
+  grossSalary Decimal // baseSalary + bonus + overtime
+  bonus       Decimal @default(0)
+  overtime    Decimal @default(0)
+  deductions  Decimal @default(0)
+  netSalary   Decimal // grossSalary - deductions
+
+  method PaymentMethod
+  status PayrollStatus @default(PENDING)
+
+  month Int
+  year  Int
+
+  approvedById String?
+  approvedAt   DateTime?
+  paidAt       DateTime?
+
+  createdAt DateTime @default(now())
+
+  staffProfile StaffProfile @relation(fields: [staffProfileId], references: [id])
+  approvedBy   User?        @relation(fields: [approvedById], references: [id])
+
+  @@unique([staffProfileId, month, year])
+  @@index([status])
+  @@index([month, year])
 }
 
 model Role {
@@ -78,8 +202,9 @@ model Permission {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  roles           RolePermission[]
-  userPermissions UserPermission[]
+  roles                 RolePermission[]
+  userPermissions       UserPermission[]
+  BranchUserPermissions BranchUserPermission[]
 }
 
 model RolePermission {
@@ -101,8 +226,10 @@ model UserPermission {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user       User       @relation(fields: [userId], references: [id])
-  permission Permission @relation(fields: [permissionId], references: [id])
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
 }
 
 model Business {
@@ -112,34 +239,41 @@ model Business {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  // branches      Branch[]
+  owner            User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   // subscriptions Subscription[]
-  branches Branch[]
+  branches         Branch[]
+  businessSettings BusinessSettings?
 
   @@index([ownerId])
 }
 
 model Branch {
-  id         String   @id @default(uuid())
+  id          String    @id @default(uuid())
   // planId     String
-  businessId String
-  name       String
-  address    String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  businessId  String
+  name        String
+  address     String
+  image       String?   @default("")
+  isActive    Boolean   @default(true)
+  openingTime DateTime?
+  closingTime DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   // plan     Plan     @relation(fields: [planId], references: [id])
 
-  // spaces        Space[]
   // devices       Device[]
   // tools         Tool[]
   // visits        Visit[]
   // staffProfiles StaffProfile[]
   // revenues      Revenue[]
   // expenses      Expense[]
-  staffProfiles staffProfile[]
+  staffProfiles         StaffProfile[]
+  spaces                Space[]
+  devices               Device[]
+  tools                 Tool[]
+  BranchUserPermissions BranchUserPermission[]
 
   // @@index([planId])
   @@index([businessId])
@@ -150,4 +284,77 @@ model BlacklistedToken {
   token     String   @unique
   expiredAt DateTime
   createdAt DateTime @default(now())
+}
+
+model Space {
+  id              String    @id @default(uuid())
+  branchId        String
+  // planId    String
+  name            String
+  type            SpaceType
+  customTypeLabel String?
+  image           String    @default("https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=")
+  capacity        Int
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  branch  Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  // plan         Plan          @relation(fields: [planId], references: [id])
+  // pricingRules PricingRule[]
+  // @@index([planId])
+  devices Device[]
+
+  @@index([branchId])
+}
+
+model Device {
+  id              String     @id @default(uuid())
+  branchId        String
+  // planId          String
+  spaceId         String?
+  type            DeviceType
+  customTypeLabel String?
+  image           String     @default("https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=")
+  hourlyPrice     Decimal    @db.Decimal(10, 2)
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  space  Space? @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  // @@index([planId])
+
+  // plan   Plan   @relation(fields: [planId], references: [id])
+  @@index([branchId])
+  @@index([spaceId])
+}
+
+model Tool {
+  id       String @id @default(uuid())
+  branchId String
+  // planId   String
+
+  name            String
+  image           String  @default("https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=")
+  pricePerSession Decimal
+  isActive        Boolean @default(true)
+
+  /**
+   * 🧾 Audit fields
+   */
+  createdBy String
+  updatedBy String
+  deletedAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  // plan         Plan          @relation(fields: [planId], references: [id])
+  // pricingRules PricingRule[]
+
+  @@index([branchId])
+  // @@index([planId])
+  @@index([deletedAt])
 }

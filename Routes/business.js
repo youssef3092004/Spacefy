@@ -10,6 +10,7 @@ import {
 import { verifyToken } from "../middleware/auth.js";
 import { cacheMiddleware } from "../middleware/cache.js";
 import { checkPermission } from "../middleware/checkPermission.js";
+import { checkOwnership } from "../middleware/checkOwnership.js";
 
 const router = Router();
 
@@ -35,21 +36,24 @@ router.get(
 router.get(
   "/getById/:id",
   verifyToken,
-  checkPermission("VIEW-BUSINESSES"),
   cacheMiddleware((req) => `business:${req.params.id}`, "TTL_BY_ID"),
+  checkPermission("VIEW-BUSINESSES"),
+  checkOwnership({ model: "business", paramId: "id", scope: "business" }),
   getBusinessById,
 );
 router.put(
   "/update/:id",
   verifyToken,
-  checkPermission("UPDATE-BUSINESSES"),
   cacheMiddleware((req) => `business:${req.params.id}`, "TTL_BY_ID"),
+  checkPermission("UPDATE-BUSINESSES"),
+  checkOwnership({ model: "business", paramId: "id", scope: "business" }),
   updateBusinessById,
 );
 router.delete(
   "/deleteById/:id",
   verifyToken,
   checkPermission("DELETE-BUSINESSES"),
+  checkOwnership({ model: "business", paramId: "id", scope: "business" }),
   deleteBusinessById,
 );
 router.delete(

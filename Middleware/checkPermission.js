@@ -1,8 +1,21 @@
-import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
 import { formatPermission } from "../utils/formatPermission.js";
+import { hasPermission } from "../utils/hasPermission.js";
 
-export const checkPermission = (permissionName) => {
+/**
+ * Permission check middleware
+ *
+ * Usage:
+ * router.post("/create", checkPermission("CREATE-BRANCHES"), controller);
+ *
+ * For branch-scoped actions:
+ * router.post("/create", checkPermission("CREATE-DEVICES", true), controller);
+ *
+ * @param {string} permissionName - Permission name
+ * @param {boolean} [requireBranchId=false] - If true, extracts branchId from request
+ */
+
+export const checkPermission = (permissionName, requireBranchId = false) => {
   return async (req, res, next) => {
     try {
       if (!req.user || !req.user.roleId) {
@@ -14,52 +27,49 @@ export const checkPermission = (permissionName) => {
         );
       }
 
-      const { id: userId, roleId } = req.user;
+      const { userId, roleId } = req.user;
+      const roleName = req.user.roleName;
 
-      const role = await prisma.role.findUnique({
-        where: { id: roleId },
-        select: { name: true },
-      });
-
-      if (!role) {
-        return next(new AppError("Role not found", 403));
+      if (!roleName) {
+        return next(new AppError("Role not found in user session", 403));
       }
 
-      if (role.name === "DEVELOPER") {
-        return next();
+      let branchId = null;
+      if (requireBranchId) {
+        branchId =
+          req.params.branchId || req.body?.branchId || req.query?.branchId;
+
+        if (!branchId) {
+          return next(
+            new AppError(
+              `branchId is required for permission: ${permissionName}`,
+              400,
+            ),
+          );
+        }
       }
 
-      let hasPermission = null;
+      const allowed = await hasPermission(
+        userId,
+        roleId,
+        roleName,
+        permissionName,
+        branchId,
+        next,
+      );
 
-      if (role.name === "STAFF") {
-        hasPermission = await prisma.UserPermission.findFirst({
-          where: {
-            userId,
-            permission: {
-              name: permissionName,
-            },
-          },
-        });
-      } else {
-        hasPermission = await prisma.RolePermission.findFirst({
-          where: {
-            roleId,
-            permission: {
-              name: permissionName,
-            },
-          },
-        });
-      }
-
-      const permission = await formatPermission(permissionName);
-
-      if (!hasPermission) {
+      if (!allowed) {
+        const permission = await formatPermission(permissionName);
         return next(
           new AppError(
-            `Forbidden: You do not have permission to perform "${permission}"`,
+            `Forbidden: You do not have permission to perform ${permission}`,
             403,
           ),
         );
+      }
+
+      if (branchId) {
+        req.branchId = branchId;
       }
 
       next();

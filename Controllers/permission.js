@@ -5,6 +5,11 @@ import { pagination } from "../utils/pagination.js";
 
 export const createPermission = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can create permissions", 403),
+      );
+    }
     const { name, description } = req.body;
     if (!name || !description) {
       return next(new AppError("Name and description are required", 400));
@@ -28,8 +33,9 @@ export const createPermission = async (req, res, next) => {
       await redisClient.del(keys);
     }
     res.status(201).json({
-      success: true,
+      status: "success",
       data: newPermission,
+      source: "database",
     });
   } catch (error) {
     next(error);
@@ -38,6 +44,11 @@ export const createPermission = async (req, res, next) => {
 
 export const getPermissionById = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can get permissions", 403),
+      );
+    }
     const { id } = req.params;
     if (!id) {
       return next(new AppError("Permission ID is required", 400));
@@ -49,8 +60,9 @@ export const getPermissionById = async (req, res, next) => {
       return next(new AppError("Permission not found", 404));
     }
     res.status(200).json({
-      success: true,
+      status: "success",
       data: permission,
+      source: "database",
     });
   } catch (error) {
     next(error);
@@ -59,6 +71,11 @@ export const getPermissionById = async (req, res, next) => {
 
 export const getAllPermissions = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can get permissions", 403),
+      );
+    }
     const { page, limit, skip, sort, order } = pagination(req);
 
     const [total, permissions] = await prisma.$transaction([
@@ -75,7 +92,7 @@ export const getAllPermissions = async (req, res, next) => {
     const totalPages = limit > 0 ? Math.ceil(total / limit) : 0;
 
     res.status(200).json({
-      success: true,
+      status: "success",
       data: permissions,
       meta: {
         page,
@@ -94,6 +111,11 @@ export const getAllPermissions = async (req, res, next) => {
 
 export const deletePermissionById = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can delete permissions", 403),
+      );
+    }
     const { id } = req.params;
     if (!id) {
       return next(new AppError("Permission ID is required", 400));
@@ -110,8 +132,9 @@ export const deletePermissionById = async (req, res, next) => {
       await redisClient.del(keys);
     }
     res.status(200).json({
-      success: true,
+      status: "success",
       message: "Permission deleted successfully",
+      source: "database",
     });
   } catch (error) {
     next(error);
@@ -120,15 +143,21 @@ export const deletePermissionById = async (req, res, next) => {
 
 export const deleteAllPermissions = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can delete permissions", 403),
+      );
+    }
     const result = await prisma.permission.deleteMany({});
     const keys = await redisClient.keys("permissions:*");
     if (keys.length > 0) {
       await redisClient.del(keys);
     }
     res.status(200).json({
-      success: true,
+      status: "success",
       message: "All permissions deleted successfully",
       count: result.count,
+      source: "database",
     });
   } catch (error) {
     next(error);
@@ -137,6 +166,11 @@ export const deleteAllPermissions = async (req, res, next) => {
 
 export const updatePermissionById = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can update permissions", 403),
+      );
+    }
     const { id } = req.params;
     if (!id) {
       return next(new AppError("Permission ID is required", 400));
@@ -158,7 +192,7 @@ export const updatePermissionById = async (req, res, next) => {
       await redisClient.del(keys);
     }
     res.status(200).json({
-      success: true,
+      status: "success",
       data: updatedPermission,
       source: "database",
     });

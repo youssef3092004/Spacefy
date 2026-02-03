@@ -1,57 +1,77 @@
 import { prisma } from "../configs/db.js";
-import { redisClient } from "../configs/redis.js";
 import { AppError } from "../utils/appError.js";
 import { pagination } from "../utils/pagination.js";
+import { compressAndUpload } from "../utils/cloudinary.js";
+
+const timeToDate = (time) => {
+  return new Date(`2026-01-01T${time}:00.000Z`);
+};
 
 export const createBranch = async (req, res, next) => {
   try {
-    const { name, address, businessId } = req.body;
-    if (!name || !address || !businessId) {
+    const { name, address, businessId, openingTime, closingTime } = req.body;
+
+    for (const [key, value] of Object.entries({
+      name,
+      address,
+      businessId,
+      openingTime,
+      closingTime,
+    })) {
+      if (!value) return next(new AppError(`${key} is required`, 400));
+    }
+
+    const parseTimeToMinutes = (t) => {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + m;
+    };
+
+    if (parseTimeToMinutes(openingTime) >= parseTimeToMinutes(closingTime)) {
       return next(
-        new AppError("Name and address and businessId are required", 400),
+        new AppError("Opening time must be before closing time", 400),
       );
     }
+
     const existingBusiness = await prisma.business.findUnique({
       where: { id: businessId },
     });
-    if (!existingBusiness) {
-      return next(new AppError("Associated business not found", 404));
-    }
+    if (!existingBusiness) return next(new AppError("Business not found", 404));
+
+    if (!req.file) return next(new AppError("Branch image is required", 400));
+
+    const uploadResult = await compressAndUpload(req.file.buffer, "branches");
+
     const newBranch = await prisma.branch.create({
       data: {
         name,
         address,
         businessId,
+        image: uploadResult.secure_url,
+        openingTime: timeToDate(openingTime),
+        closingTime: timeToDate(closingTime),
       },
     });
-    await redisClient.keys("branch:*");
-    const keys = await redisClient.keys("branches:*");
-    if (keys.length > 0) {
-      await redisClient.del(keys);
-    }
-    res.status(201).json({
-      success: true,
-      data: newBranch,
-    });
-  } catch (error) {
-    next(error);
+
+    res.status(201).json({ status: "success", data: newBranch });
+  } catch (err) {
+    next(err);
   }
 };
 
 export const getBranchById = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    if (!id) {
+    const { branchId } = req.params;
+    if (!branchId) {
       return next(new AppError("Branch ID is required", 400));
     }
     const branch = await prisma.branch.findUnique({
-      where: { id },
+      where: { id: branchId },
     });
     if (!branch) {
       return next(new AppError("Branch not found", 404));
     }
     res.status(200).json({
-      success: true,
+      status: "success",
       data: branch,
       source: "database",
     });
@@ -76,7 +96,7 @@ export const getAllBranches = async (req, res, next) => {
     }
     const totalPages = Math.ceil(total / limit);
     res.status(200).json({
-      success: true,
+      status: "success",
       data: branches,
       meta: {
         page,
@@ -93,15 +113,51 @@ export const getAllBranches = async (req, res, next) => {
   }
 };
 
+export const getBranchesByBusinessId = async (req, res, next) => {
+  try {
+    const { businessId } = req.params;
+    if (!businessId) {
+      return next(new AppError("Business ID is required", 400));
+    }
+    const existingBusiness = await prisma.business.findUnique({
+      where: { id: businessId },
+    });
+    if (!existingBusiness) {
+      return next(new AppError("Business not found", 404));
+    }
+    const [branches, total] = await prisma.$transaction([
+      prisma.branch.findMany({
+        where: { businessId },
+      }),
+      prisma.branch.count({
+        where: { businessId },
+      }),
+    ]);
+    if (!branches.length) {
+      return next(new AppError("No branches found for this business", 404));
+    }
+    res.status(200).json({
+      status: "success",
+      data: branches,
+      meta: {
+        total,
+      },
+      source: "database",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const updateBranchById = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const { branchId } = req.params;
     const { name, address } = req.body;
-    if (!id) {
+    if (!branchId) {
       return next(new AppError("Branch ID is required", 400));
     }
     const existingBranch = await prisma.branch.findUnique({
-      where: { id },
+      where: { id: branchId },
     });
     if (!existingBranch) {
       return next(new AppError("Branch not found", 404));
@@ -110,19 +166,73 @@ export const updateBranchById = async (req, res, next) => {
       return next(new AppError("Name and address are required", 400));
     }
     const updatedBranch = await prisma.branch.update({
-      where: { id },
+      where: { id: branchId },
       data: {
         name,
         address,
       },
     });
-    await redisClient.del(`branch:${id}`);
-    const cacheKeys = await redisClient.keys("branches:*");
-    if (cacheKeys.length > 0) {
-      await redisClient.del(cacheKeys);
-    }
     res.status(200).json({
-      success: true,
+      status: "success",
+      data: updatedBranch,
+      source: "database",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateBranchByIdPatch = async (req, res, next) => {
+  try {
+    const { branchId } = req.params;
+    if (!branchId) {
+      return next(new AppError("Branch ID is required", 400));
+    }
+    const existingBranch = await prisma.branch.findUnique({
+      where: { id: branchId },
+    });
+    if (!existingBranch || existingBranch.length === 0) {
+      return next(new AppError("Branch not found", 404));
+    }
+    const allowedFields = [
+      "name",
+      "address",
+      "image",
+      "openingTime",
+      "closingTime",
+    ];
+    const updateData = { ...req.body };
+
+    if (updateData.openingTime) {
+      const openingTime = updateData.openingTime;
+      if (typeof openingTime !== "string") {
+        return next(
+          new AppError("Opening time must be a string in 'HH:MM' format", 400),
+        );
+      }
+      updateData.openingTime = timeToDate(openingTime);
+    }
+    if (updateData.closingTime) {
+      const closingTime = updateData.closingTime;
+      if (typeof closingTime !== "string") {
+        return next(
+          new AppError("Closing time must be a string in 'HH:MM' format", 400),
+        );
+      }
+      updateData.closingTime = timeToDate(closingTime);
+    }
+    for (const key of Object.keys(updateData)) {
+      if (!allowedFields.includes(key)) {
+        return next(new AppError(`Field '${key}' cannot be updated`, 400));
+      }
+    }
+    const updatedBranch = await prisma.branch.update({
+      where: { id: branchId },
+      data: updateData,
+    });
+
+    res.status(200).json({
+      status: "success",
       data: updatedBranch,
       source: "database",
     });
@@ -133,27 +243,24 @@ export const updateBranchById = async (req, res, next) => {
 
 export const deleteBranchById = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    if (!id) {
+    const { branchId } = req.params;
+    if (!branchId) {
       return next(new AppError("Branch ID is required", 400));
     }
 
     const branch = await prisma.branch.findUnique({
-      where: { id },
+      where: { id: branchId },
     });
     if (!branch) {
       return next(new AppError("Branch not found", 404));
     }
 
     await prisma.branch.delete({
-      where: { id },
+      where: { id: branchId },
     });
-    const keys = await redisClient.keys("branches:*");
-    if (keys.length > 0) {
-      await redisClient.del(keys);
-    }
+
     res.status(200).json({
-      success: true,
+      status: "success",
       message: "Branch deleted successfully",
       source: "database",
     });
@@ -168,54 +275,10 @@ export const deleteAllBranches = async (req, res, next) => {
     if (deletedBranches.count === 0) {
       return next(new AppError("No branches to delete", 404));
     }
-    await redisClient.del("branch:*");
-    const keys = await redisClient.keys("branches:*");
-    if (keys.length > 0) {
-      await redisClient.del(keys);
-    }
     res.status(200).json({
-      success: true,
+      status: "success",
       message: "All branches deleted successfully",
       count: deletedBranches.count,
-      source: "database",
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-export const getBranchesByBusinessId = async (req, res, next) => {
-  try {
-    const { businessId } = req.params;
-    const { page, limit, skip, sort, order } = pagination(req);
-    if (!businessId) {
-      return next(new AppError("Business ID is required", 400));
-    }
-    const [branches, total] = await prisma.$transaction([
-      prisma.branch.findMany({
-        where: { businessId },
-        skip,
-        take: limit,
-        orderBy: { [sort]: order },
-      }),
-      prisma.branch.count({
-        where: { businessId },
-      }),
-    ]);
-    if (!branches.length) {
-      return next(new AppError("No branches found for this business", 404));
-    }
-    const totalPages = Math.ceil(total / limit);
-    res.status(200).json({
-      success: true,
-      data: branches,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages,
-        sort,
-        order,
-      },
       source: "database",
     });
   } catch (error) {

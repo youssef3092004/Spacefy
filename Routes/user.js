@@ -6,10 +6,12 @@ import {
   deleteUserById,
   updateUserById,
   getUserByRoleName,
+  getMe,
 } from "../controllers/user.js";
 import { verifyToken } from "../middleware/auth.js";
 import { cacheMiddleware } from "../middleware/cache.js";
 import { checkPermission } from "../middleware/checkPermission.js";
+import { checkOwnership } from "../middleware/checkOwnership.js";
 
 const router = Router();
 
@@ -30,8 +32,13 @@ router.get(
 router.get(
   "/getById/:id",
   verifyToken,
-  checkPermission("VIEW-USERS"),
   cacheMiddleware((req) => `user:${req.params.id}`, "TTL_BY_ID"),
+  checkPermission("VIEW-USERS"),
+  checkOwnership({
+    model: "user",
+    paramId: "id",
+    scope: "user",
+  }),
   getUserById,
 );
 router.delete(
@@ -44,13 +51,23 @@ router.delete(
   "/deleteById/:id",
   verifyToken,
   checkPermission("DELETE-USERS"),
+  checkOwnership({
+    model: "user",
+    paramId: "id",
+    scope: "user",
+  }),
   deleteUserById,
 );
 router.patch(
-  "/update",
+  "/update/:id",
   verifyToken,
   checkPermission("UPDATE-USERS"),
   cacheMiddleware((req) => `user:${req.params.id}`, "TTL_BY_ID"),
+  checkOwnership({
+    model: "user",
+    paramId: "id",
+    scope: "user",
+  }),
   updateUserById,
 );
 router.get(
@@ -66,5 +83,7 @@ router.get(
   ),
   getUserByRoleName,
 );
+
+router.get("/getMe", verifyToken, getMe);
 
 export default router;

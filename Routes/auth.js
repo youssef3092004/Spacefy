@@ -10,15 +10,11 @@ import {
 } from "../controllers/auth.js";
 import { verifyToken } from "../middleware/auth.js";
 import { checkPermission } from "../middleware/checkPermission.js";
+import { checkOwnership } from "../middleware/checkOwnership.js";
 
 const router = Router();
 
-router.post(
-  "/registerOwner",
-  verifyToken,
-  checkPermission("REGISTER-OWNER"),
-  registerOwner,
-);
+router.post("/registerOwner", verifyToken, registerOwner);
 router.post(
   "/registerAdmin",
   verifyToken,
@@ -31,13 +27,14 @@ router.post(
   checkPermission("REGISTER-STAFF"),
   registerStaff,
 );
-router.post(
-  "/registerDeveloper",
-  checkPermission("REGISTER-DEVELOPER"),
-  registerDeveloper,
-);
+router.post("/registerDeveloper", verifyToken, registerDeveloper);
 router.post("/login", login);
 router.post("/logout", verifyToken, logout);
-router.post("/changePassword/:id", verifyToken, forgetPassword);
+router.post(
+  "/changePassword/:id",
+  verifyToken,
+  checkOwnership({ model: "user", paramId: "id", scope: "user" }),
+  forgetPassword,
+);
 
 export default router;

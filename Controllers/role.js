@@ -5,6 +5,11 @@ import { pagination } from "../utils/pagination.js";
 
 export const createRole = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can create roles", 403),
+      );
+    }
     const { name, description } = req.body;
     if (!name || !description) {
       return next(new AppError("Name and description are required", 400));
@@ -37,6 +42,9 @@ export const createRole = async (req, res, next) => {
 
 export const getRoles = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(new AppError("Forbidden: Only DEVELOPER can get roles", 403));
+    }
     const { page, limit, skip, sort, order } = pagination(req);
     const [roles, total] = await prisma.$transaction([
       prisma.role.findMany({
@@ -70,6 +78,11 @@ export const getRoles = async (req, res, next) => {
 
 export const getRoleById = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can get roles by ID", 403),
+      );
+    }
     const { id } = req.params;
     if (!id) {
       return next(new AppError("Role ID is required", 400));
@@ -91,6 +104,11 @@ export const getRoleById = async (req, res, next) => {
 
 export const deleteRoleById = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can delete roles", 403),
+      );
+    }
     const { id } = req.params;
     if (!id) {
       return next(new AppError("Role ID is required", 400));
@@ -105,7 +123,7 @@ export const deleteRoleById = async (req, res, next) => {
     if (!role) {
       return next(new AppError("Role not found", 404));
     }
-    const keys = await redisClient.keys(`role:*`);
+    const keys = await redisClient.keys(`role:${id}`);
     if (keys.length > 0) {
       await redisClient.del(keys);
     }
@@ -125,6 +143,11 @@ export const deleteRoleById = async (req, res, next) => {
 
 export const updateRole = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can update roles", 403),
+      );
+    }
     const { id } = req.params;
     if (!id) {
       return next(new AppError("Role ID is required", 400));

@@ -61,7 +61,7 @@ export const getUserById = async (req, res, next) => {
     const user = await prisma.user.findUnique({
       where: { id },
       include: {
-        role: { id: true, name: true },
+        role: { select: { id: true, name: true } },
       },
     });
 
@@ -181,6 +181,25 @@ export const updateUserById = async (req, res, next) => {
         return next(new AppError("Invalid name format", 400));
       }
     }
+    if (updateData.roleId) {
+      const role = await prisma.role.findUnique({
+        where: { id: updateData.roleId },
+      });
+      if (!role) {
+        return next(new AppError("Role not found", 404));
+      }
+      if (
+        role.name === "DEVELOPER" ||
+        (role.name === "OWNER" && req.user.roleName !== "DEVELOPER")
+      ) {
+        return next(
+          new AppError(
+            "Forbidden: Cannot assign DEVELOPER or OWNER role to a user",
+            403,
+          ),
+        );
+      }
+    }
     const keys = Object.keys(updateData).filter(
       (key) => !allowedFields.includes(key),
     );
@@ -191,7 +210,7 @@ export const updateUserById = async (req, res, next) => {
       where: { id },
       data: updateData,
       include: {
-        role: { id: true, name: true },
+        role: { select: { id: true, name: true } },
       },
     });
     await redisClient.del(`user:${id}`);
@@ -246,6 +265,36 @@ export const getUserByRoleName = async (req, res, next) => {
         sort,
         order,
       },
+      source: "database",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getMe = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        role: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        businesses: true,
+      },
+    });
+    if (!user) {
+      return next(new AppError("User not found", 404));
+    }
+    // eslint-disable-next-line no-unused-vars
+    const userWithoutPassword = (({ password, ...rest }) => rest)(user);
+    res.status(200).json({
+      success: true,
+      data: userWithoutPassword,
       source: "database",
     });
   } catch (error) {

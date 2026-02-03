@@ -10,10 +10,12 @@ import {
   getStaffProfileByUserId,
   getStaffProfilesCount,
   updateStaffProfileByUserId,
+  updateStaffProfileByUserIdPatch,
 } from "../controllers/staffProfile.js";
 import { verifyToken } from "../middleware/auth.js";
 import { cacheMiddleware } from "../middleware/cache.js";
 import { checkPermission } from "../middleware/checkPermission.js";
+import { checkOwnership } from "../middleware/checkOwnership.js";
 
 const router = Router();
 
@@ -41,30 +43,50 @@ router.get(
 router.get(
   "/getById/:id",
   verifyToken,
-  checkPermission("VIEW-STAFF-PROFILES"),
   cacheMiddleware((req) => `staffProfile:${req.params.id}`, "TTL_BY_ID"),
+  checkPermission("VIEW-STAFF-PROFILES"),
+  checkOwnership({
+    model: "staffProfile",
+    paramId: "id",
+    scope: "staffProfile",
+  }),
   getStaffProfileById,
 );
 router.get(
   "/getByBranchId/:branchId",
   verifyToken,
-  checkPermission("VIEW-STAFF-PROFILES"),
   cacheMiddleware(
     (req) => `staffProfilesBranch:${req.params.branchId}`,
     "TTL_BY_ID",
   ),
+  checkPermission("VIEW-STAFF-PROFILES"),
+  checkOwnership({
+    model: "branch",
+    paramId: "branchId",
+    scope: "branch",
+  }),
   getStaffProfilesByBranchId,
 );
 router.put(
   "/updateById/:id",
   verifyToken,
   checkPermission("UPDATE-STAFF-PROFILES"),
+  checkOwnership({
+    model: "staffProfile",
+    paramId: "id",
+    scope: "staffProfile",
+  }),
   updateStaffProfileById,
 );
 router.delete(
   "/deleteById/:id",
   verifyToken,
   checkPermission("DELETE-STAFF-PROFILES"),
+  checkOwnership({
+    model: "staffProfile",
+    paramId: "id",
+    scope: "staffProfile",
+  }),
   deleteStaffProfileById,
 );
 router.delete(
@@ -81,6 +103,11 @@ router.get(
     (req) => `staffProfileUser:${req.params.userId}`,
     "TTL_BY_ID",
   ),
+  checkOwnership({
+    model: "staffProfile",
+    paramId: "userId",
+    scope: "staffProfile",
+  }),
   getStaffProfileByUserId,
 );
 router.get(
@@ -94,7 +121,23 @@ router.put(
   "/updateByUserId/:userId",
   verifyToken,
   checkPermission("UPDATE-STAFF-PROFILES"),
+  checkOwnership({
+    model: "staffProfile",
+    paramId: "userId",
+    scope: "staffProfile",
+  }),
   updateStaffProfileByUserId,
+);
+router.patch(
+  "/updateByUserId/:userId",
+  verifyToken,
+  checkPermission("UPDATE-STAFF-PROFILES"),
+  checkOwnership({
+    model: "staffProfile",
+    paramId: "userId",
+    scope: "staffProfile",
+  }),
+  updateStaffProfileByUserIdPatch,
 );
 
 export default router;

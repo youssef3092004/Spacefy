@@ -1,5 +1,4 @@
 import { prisma } from "../configs/db.js";
-import { redisClient } from "../configs/redis.js";
 import { AppError } from "../utils/appError.js";
 import { pagination } from "../utils/pagination.js";
 
@@ -15,14 +14,19 @@ export const createBusiness = async (req, res, next) => {
         ownerId,
       },
     });
-    await redisClient.del("business:*");
-    const keys = await redisClient.keys("businesses:*");
-    if (keys.length > 0) {
-      await redisClient.del(keys);
-    }
+
+    const newSettings = await prisma.businessSettings.create({
+      data: {
+        businessId: newBusiness.id,
+        defaultLanguage: "EN",
+        notificationsEnabled: true,
+        autoApprovePayroll: false,
+      },
+    });
+
     return res.status(201).json({
       success: true,
-      data: newBusiness,
+      data: { business: newBusiness, settings: newSettings },
       source: "database",
     });
   } catch (error) {
@@ -97,11 +101,6 @@ export const deleteBusinessById = async (req, res, next) => {
     if (!business) {
       return next(new AppError("Business not found", 404));
     }
-    await redisClient.del("business:*");
-    const keys = await redisClient.keys("businesses:*");
-    if (keys.length > 0) {
-      await redisClient.del(keys);
-    }
     res.status(200).json({
       success: true,
       data: business,
@@ -117,11 +116,6 @@ export const deleteAllBusinesses = async (req, res, next) => {
     const deletedBusinesses = await prisma.business.deleteMany({});
     if (deletedBusinesses.count === 0) {
       return next(new AppError("No businesses to delete", 404));
-    }
-    await redisClient.del("business:*");
-    const keys = await redisClient.keys("businesses:*");
-    if (keys.length > 0) {
-      await redisClient.del(keys);
     }
     res.status(200).json({
       success: true,
@@ -164,11 +158,6 @@ export const updateBusinessById = async (req, res, next) => {
       },
     });
 
-    await redisClient.del(`business:${id}`);
-    const keys = await redisClient.keys("businesses:*");
-    if (keys.length > 0) {
-      await redisClient.del(keys);
-    }
     res.status(200).json({
       success: true,
       data: updatedBusiness,

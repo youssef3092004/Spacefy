@@ -24,6 +24,12 @@ export const verifyToken = async (req, res, next) => {
       return next(new AppError("Authorization denied: Token is Expired", 401));
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Handle old tokens that use 'roles' instead of 'roleName'
+    if (decoded.roles && !decoded.roleName) {
+      decoded.roleName = decoded.roles;
+    }
+    
     req.user = decoded;
     next();
   } catch (err) {

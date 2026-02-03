@@ -15,6 +15,11 @@ import { messages } from "../locales/message.js";
 
 export const registerOwner = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can register owners", 403),
+      );
+    }
     const { name, phone, email, password } = req.body;
 
     const requiredFields = { name, phone, email, password };
@@ -174,9 +179,9 @@ export const registerAdmin = async (req, res, next) => {
 
 export const registerStaff = async (req, res, next) => {
   try {
-    const { name, phone, email, password } = req.body;
+    const { name, phone, email, password, branchId } = req.body;
 
-    const requiredFields = { name, phone, email, password };
+    const requiredFields = { name, phone, email, password, branchId };
 
     for (let i in requiredFields) {
       if (!requiredFields[i]) {
@@ -200,6 +205,13 @@ export const registerStaff = async (req, res, next) => {
     }
     if (!isValidPhone(phone)) {
       return next(new AppError("Invalid phone format", 400));
+    }
+
+    const existingBranch = await prisma.branch.findUnique({
+      where: { id: branchId },
+    });
+    if (!existingBranch) {
+      return next(new AppError("Branch does not exist", 400));
     }
 
     const roleId = "2884d176-7c61-4b09-81d2-d6d7269d4ad1";
@@ -243,9 +255,24 @@ export const registerStaff = async (req, res, next) => {
     // eslint-disable-next-line no-unused-vars
     const { password: _, ...userWithoutPassword } = newUser;
 
+    const staffProfile = await prisma.staffProfile.create({
+      data: {
+        userId: newUser.id,
+        branchId: branchId,
+        baseSalary: 0,
+        hireDate: new Date(),
+        position: "Pending",
+        department: "Pending",
+        nationalId: {},
+      },
+    });
+
     res.status(201).json({
-      status: "success",
+      success: true,
+      message:
+        "Staff registered successfully and created staff profile, please update your profile",
       data: userWithoutPassword,
+      staffProfile: staffProfile,
     });
   } catch (error) {
     next(error);
@@ -254,6 +281,11 @@ export const registerStaff = async (req, res, next) => {
 
 export const registerDeveloper = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can register developers", 403),
+      );
+    }
     const { name, phone, email, password } = req.body;
 
     const requiredFields = { name, phone, email, password };
@@ -360,15 +392,16 @@ export const login = async (req, res, next) => {
     // eslint-disable-next-line no-unused-vars
     const { password: _, ...userWithoutPassword } = user;
 
-    const roleName = await prisma.role.findUnique({
+    const role = await prisma.role.findUnique({
       where: { id: user.roleId },
     });
 
     const token = jwt.sign(
       {
         id: user.id,
+        userId: user.id,
         roleId: user.roleId,
-        roles: roleName.name,
+        roleName: role.name,
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN },

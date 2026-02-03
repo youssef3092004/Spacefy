@@ -39,6 +39,9 @@ export const createStaffProfile = async (req, res, next) => {
     if (!hireDate || isNaN(Date.parse(hireDate))) {
       return next(new AppError("hireDate must be a valid datetime", 400));
     }
+    if (!parseFloat(baseSalary) || parseFloat(baseSalary) < 0) {
+      return next(new AppError("baseSalary must be a positive number", 400));
+    }
     const nationalId = {
       number: nationalIdNumber,
       frontImage: nationalIdFrontImage,
@@ -68,7 +71,7 @@ export const createStaffProfile = async (req, res, next) => {
       data: {
         userId,
         branchId,
-        baseSalary,
+        baseSalary: parseFloat(baseSalary),
         hireDate: new Date(hireDate),
         position,
         department,
@@ -100,7 +103,9 @@ export const getStaffProfileById = async (req, res, next) => {
       where: { id },
       include: {
         user: {
-          include: { role: { select: { id: true, name: true } } },
+          include: {
+            role: { select: { id: true, name: true } },
+          },
         },
       },
     });
@@ -125,24 +130,33 @@ export const getAllStaffProfiles = async (req, res, next) => {
       prisma.staffProfile.findMany({
         skip,
         take: limit,
-        include: {
+        orderBy: { [sort]: order },
+        select: {
+          id: true,
+          userId: true,
+          branchId: true,
+          department: true,
+          hireDate: true,
+          baseSalary: true,
           user: {
-            include: {
+            select: {
+              name: true,
+              email: true,
+              phone: true,
+              profileImage: true,
               role: {
                 select: {
-                  id: true,
                   name: true,
                 },
               },
             },
           },
         },
-        orderBy: { [sort]: order },
       }),
       prisma.staffProfile.count(),
     ]);
 
-    if (!staffProfiles || staffProfiles.length === 0) {
+    if (!staffProfiles.length) {
       return next(new AppError("No staff profiles found", 404));
     }
 
@@ -166,6 +180,109 @@ export const getAllStaffProfiles = async (req, res, next) => {
   }
 };
 
+export const getStaffProfilesByBranchId = async (req, res, next) => {
+  try {
+    const { branchId } = req.params;
+    const { page, limit, skip, sort, order } = pagination(req);
+    const [staffProfiles, total] = await prisma.$transaction([
+      prisma.staffProfile.findMany({
+        where: { branchId },
+        skip,
+        take: limit,
+        orderBy: { [sort]: order },
+        select: {
+          id: true,
+          userId: true,
+          branchId: true,
+          department: true,
+          hireDate: true,
+          baseSalary: true,
+          user: {
+            select: {
+              name: true,
+              email: true,
+              phone: true,
+              profileImage: true,
+              role: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.staffProfile.count({ where: { branchId } }),
+    ]);
+
+    if (!staffProfiles || staffProfiles.length === 0) {
+      return next(new AppError("No staff profiles found for this branch", 404));
+    }
+    const totalPages = Math.ceil(total / limit);
+
+    res.status(200).json({
+      success: true,
+      data: staffProfiles,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages,
+        sort,
+        order,
+      },
+      source: "database",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getStaffProfileByUserId = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return next(new AppError("User ID is required", 400));
+    }
+    const staffProfile = await prisma.staffProfile.findUnique({
+      where: { userId },
+      include: {
+        user: {
+          include: {
+            role: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!staffProfile) {
+      return next(new AppError("Staff Profile not found for this user", 404));
+    }
+    res.status(200).json({
+      success: true,
+      data: staffProfile,
+      source: "database",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getStaffProfilesCount = async (req, res, next) => {
+  try {
+    const count = await prisma.staffProfile.count();
+    if (count === 0) {
+      return next(new AppError("No staff profiles found", 404));
+    }
+    res.status(200).json({
+      success: true,
+      data: { count },
+      source: "database",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const updateStaffProfileById = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -176,7 +293,6 @@ export const updateStaffProfileById = async (req, res, next) => {
       hireDate,
       position,
       department,
-      profileImage,
       nationalIdNumber,
       nationalIdFrontImage,
       nationalIdBackImage,
@@ -191,7 +307,6 @@ export const updateStaffProfileById = async (req, res, next) => {
       hireDate,
       position,
       department,
-      profileImage,
       nationalIdNumber,
       nationalIdFrontImage,
       nationalIdBackImage,
@@ -210,17 +325,19 @@ export const updateStaffProfileById = async (req, res, next) => {
     if (!hireDate || isNaN(Date.parse(hireDate))) {
       return next(new AppError("hireDate must be a valid datetime", 400));
     }
+    if (!parseFloat(baseSalary) || parseFloat(baseSalary) < 0) {
+      return next(new AppError("baseSalary must be a positive number", 400));
+    }
 
     const updatedStaffProfile = await prisma.staffProfile.update({
       where: { id },
       data: {
         userId,
         branchId,
-        baseSalary,
+        baseSalary: parseFloat(baseSalary),
         hireDate: new Date(hireDate),
         position,
         department,
-        profileImage,
         nationalId: {
           number: nationalIdNumber,
           frontImage: nationalIdFrontImage,
@@ -292,98 +409,6 @@ export const deleteAllStaffProfiles = async (req, res, next) => {
   }
 };
 
-export const getStaffProfilesByBranchId = async (req, res, next) => {
-  try {
-    const { branchId } = req.params;
-    const { page, limit, skip, sort, order } = pagination(req);
-    const [staffProfiles, total] = await prisma.$transaction([
-      prisma.staffProfile.findMany({
-        where: { branchId },
-        skip,
-        take: limit,
-        orderBy: { [sort]: order },
-        include: {
-          user: {
-            include: {
-              role: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-      prisma.staffProfile.count({ where: { branchId } }),
-    ]);
-
-    if (!staffProfiles || staffProfiles.length === 0) {
-      return next(new AppError("No staff profiles found for this branch", 404));
-    }
-    const totalPages = Math.ceil(total / limit);
-
-    res.status(200).json({
-      success: true,
-      data: staffProfiles,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages,
-        sort,
-        order,
-      },
-      source: "database",
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const getStaffProfileByUserId = async (req, res, next) => {
-  try {
-    const { userId } = req.params;
-    if (!userId) {
-      return next(new AppError("User ID is required", 400));
-    }
-    const staffProfile = await prisma.staffProfile.findUnique({
-      where: { userId },
-      include: {
-        user: {
-          include: { role: { select: { id: true, name: true } } },
-        },
-      },
-    });
-    if (!staffProfile) {
-      return next(new AppError("Staff Profile not found for this user", 404));
-    }
-    res.status(200).json({
-      success: true,
-      data: staffProfile,
-      source: "database",
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const getStaffProfilesCount = async (req, res, next) => {
-  try {
-    const count = await prisma.staffProfile.count();
-    if (count === 0) {
-      return next(new AppError("No staff profiles found", 404));
-    }
-    res.status(200).json({
-      success: true,
-      data: { count },
-      source: "database",
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const updateStaffProfileByUserId = async (req, res, next) => {
   try {
     const { userId } = req.params;
@@ -393,7 +418,6 @@ export const updateStaffProfileByUserId = async (req, res, next) => {
       hireDate,
       position,
       department,
-      profileImage,
       nationalIdNumber,
       nationalIdFrontImage,
       nationalIdBackImage,
@@ -405,7 +429,6 @@ export const updateStaffProfileByUserId = async (req, res, next) => {
       hireDate,
       position,
       department,
-      profileImage,
       nationalIdNumber,
       nationalIdFrontImage,
       nationalIdBackImage,
@@ -420,6 +443,12 @@ export const updateStaffProfileByUserId = async (req, res, next) => {
       }
     }
 
+    if (!hireDate || isNaN(Date.parse(hireDate))) {
+      return next(new AppError("hireDate must be a valid datetime", 400));
+    }
+    if (!parseFloat(baseSalary) || parseFloat(baseSalary) < 0) {
+      return next(new AppError("baseSalary must be a positive number", 400));
+    }
     const staffProfile = await prisma.staffProfile.findUnique({
       where: { userId },
     });
@@ -436,11 +465,10 @@ export const updateStaffProfileByUserId = async (req, res, next) => {
       where: { userId },
       data: {
         branchId,
-        baseSalary,
+        baseSalary: parseFloat(baseSalary),
         hireDate: new Date(hireDate),
         position,
         department,
-        profileImage,
         nationalId: {
           number: nationalIdNumber,
           frontImage: nationalIdFrontImage,
@@ -456,6 +484,69 @@ export const updateStaffProfileByUserId = async (req, res, next) => {
     res.status(200).json({
       status: "success",
       data: updatedStaffProfile,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateStaffProfileByUserIdPatch = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return next(new AppError("User ID is required", 400));
+    }
+
+    const staffProfile = await prisma.staffProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!staffProfile) {
+      return next(new AppError("Staff profile not found", 404));
+    }
+
+    const { branchId, baseSalary, hireDate, position, department, nationalId } =
+      req.body;
+
+    const updateData = {};
+
+    if (branchId) updateData.branchId = branchId;
+    if (baseSalary !== undefined) updateData.baseSalary = parseFloat(baseSalary);
+    if (hireDate) updateData.hireDate = new Date(hireDate);
+    if (position) updateData.position = position;
+    if (department) updateData.department = department;
+
+    if (hireDate && isNaN(Date.parse(hireDate))) {
+      return next(new AppError("hireDate must be a valid datetime", 400));
+    }
+
+    if (nationalId) {
+      updateData.nationalId = {
+        ...(staffProfile.nationalId || {}),
+        ...nationalId,
+      };
+    }
+
+    if (!Object.keys(updateData).length) {
+      return next(new AppError("No valid fields to update", 400));
+    }
+
+    const updatedStaffProfile = await prisma.staffProfile.update({
+      where: { userId },
+      data: updateData,
+    });
+
+    await redisClient.del(`staffProfile:${userId}`);
+    const cacheKeys = await redisClient.keys("staffProfiles:*");
+    if (cacheKeys.length > 0) {
+      await redisClient.del(cacheKeys);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: updatedStaffProfile,
+      source: "database",
     });
   } catch (error) {
     next(error);

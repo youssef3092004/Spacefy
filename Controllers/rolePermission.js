@@ -5,30 +5,33 @@ import { pagination } from "../utils/pagination.js";
 
 export const createRolePermission = async (req, res, next) => {
   try {
-    const { roleId, permissionId } = req.body;
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Forbidden: Only DEVELOPER can assign permissions", 403),
+      );
+    }
+    const { roleId, permissionIds } = req.body;
     if (!roleId) {
       return next(new AppError("Role ID are required", 400));
     }
-    if (!permissionId) {
-      return next(new AppError("Permission ID are required", 400));
+    if (!Array.isArray(permissionIds) || permissionIds.length === 0) {
+      return next(new AppError("permissionIds must be a non-empty array", 400));
     }
-    const existingRolePermission = await prisma.rolePermission.findFirst({
-      where: { roleId, permissionId },
+
+    const rolePermissionsData = permissionIds.map((permissionId) => ({
+      roleId,
+      permissionId,
+    }));
+
+    const result = await prisma.rolePermission.createMany({
+      data: rolePermissionsData,
+      skipDuplicates: true,
     });
-    if (existingRolePermission) {
-      return next(
-        new AppError("This role already has the specified permission", 400),
-      );
-    }
-    const newRolePermission = await prisma.rolePermission.create({
-      data: {
-        roleId,
-        permissionId,
-      },
-    });
+
     res.status(201).json({
       success: true,
-      data: newRolePermission,
+      message: "Permissions assigned to role successfully",
+      insertedCount: result.count,
     });
   } catch (error) {
     next(error);
@@ -37,6 +40,14 @@ export const createRolePermission = async (req, res, next) => {
 
 export const getRolePermissionById = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError(
+          "Forbidden: Only DEVELOPER can view role-permissions",
+          403,
+        ),
+      );
+    }
     const { id } = req.params;
     if (!id) {
       return next(new AppError("Role-Permission ID is required", 400));
@@ -44,7 +55,7 @@ export const getRolePermissionById = async (req, res, next) => {
     const rolePermission = await prisma.rolePermission.findUnique({
       where: { id },
     });
-    if (rolePermission === 0) {
+    if (!rolePermission || rolePermission === 0) {
       return next(new AppError("Role-Permission not found", 404));
     }
     res.status(200).json({
@@ -58,6 +69,14 @@ export const getRolePermissionById = async (req, res, next) => {
 
 export const getAllRolePermissions = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError(
+          "Forbidden: Only DEVELOPER can view role-permissions",
+          403,
+        ),
+      );
+    }
     const { page, limit, skip, sort, order } = pagination(req);
 
     const [rolePermissions, total] = await prisma.$transaction([
@@ -95,6 +114,14 @@ export const getAllRolePermissions = async (req, res, next) => {
 
 export const deleteAllRolePermissions = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError(
+          "Forbidden: Only DEVELOPER can delete role-permissions",
+          403,
+        ),
+      );
+    }
     const result = await prisma.rolePermission.deleteMany({});
     const keys = await redisClient.keys("rolePermission:*");
     if (keys.length > 0) {
@@ -112,6 +139,14 @@ export const deleteAllRolePermissions = async (req, res, next) => {
 
 export const deleteRolePermissionById = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError(
+          "Forbidden: Only DEVELOPER can delete role-permissions",
+          403,
+        ),
+      );
+    }
     const { id } = req.params;
     if (!id) {
       return next(new AppError("Role-Permission ID is required", 400));
@@ -119,7 +154,7 @@ export const deleteRolePermissionById = async (req, res, next) => {
     const rolePermission = await prisma.rolePermission.delete({
       where: { id },
     });
-    if (rolePermission === 0) {
+    if (!rolePermission || rolePermission === 0) {
       return next(new AppError("Role-Permission not found", 404));
     }
     await redisClient.del(`rolePermission:${id}`);
@@ -134,6 +169,14 @@ export const deleteRolePermissionById = async (req, res, next) => {
 
 export const updateRolePermissionById = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError(
+          "Forbidden: Only DEVELOPER can update role-permissions",
+          403,
+        ),
+      );
+    }
     const { id } = req.params;
     const { roleId, permissionId } = req.body;
     if (!id) {
@@ -161,6 +204,14 @@ export const updateRolePermissionById = async (req, res, next) => {
 
 export const getPermissionsByRoleId = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError(
+          "Forbidden: Only DEVELOPER can view role-permissions",
+          403,
+        ),
+      );
+    }
     const { roleId } = req.params;
     if (!roleId) {
       return next(new AppError("Role ID is required", 400));
