@@ -16,9 +16,7 @@ import { messages } from "../locales/message.js";
 export const registerOwner = async (req, res, next) => {
   try {
     if (req.user.roleName !== "DEVELOPER") {
-      return next(
-        new AppError("Forbidden: Only DEVELOPER can register owners", 403),
-      );
+      return next(new AppError(messages.FORBIDDEN.en, 403));
     }
     const { name, phone, email, password } = req.body;
 
@@ -35,16 +33,16 @@ export const registerOwner = async (req, res, next) => {
     }
 
     if (!isValidName(name)) {
-      return next(new AppError("Invalid name format", 400));
+      return next(new AppError(messages.INVALID_NAME_FORMAT.en, 400));
     }
     if (!isValidEmail(email)) {
-      return next(new AppError("Invalid email format", 400));
+      return next(new AppError(messages.INVALID_EMAIL_FORMAT.en, 400));
     }
     if (!isValidPassword(password)) {
-      return next(new AppError("Weak password format", 400));
+      return next(new AppError(messages.WEAK_PASSWORD_FORMAT.en, 400));
     }
     if (!isValidPhone(phone)) {
-      return next(new AppError("Invalid phone format", 400));
+      return next(new AppError(messages.INVALID_PHONE_FORMAT.en, 400));
     }
 
     const roleId = "9ad537de-b614-4faf-937a-51be5c52cb27";
@@ -53,13 +51,13 @@ export const registerOwner = async (req, res, next) => {
       where: { id: roleId },
     });
     if (!existingRole) {
-      return next(new AppError("Role does not exist", 400));
+      return next(new AppError(messages.ROLE_DOES_NOT_EXIST.en, 400));
     }
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
     if (existingUser) {
-      return next(new AppError("Email already in use", 409));
+      return next(new AppError(messages.EMAIL_EXISTS.en, 409));
     }
 
     const existingPhone = await prisma.user.findUnique({
@@ -67,7 +65,7 @@ export const registerOwner = async (req, res, next) => {
     });
 
     if (existingPhone) {
-      return next(new AppError("Phone number already in use", 409));
+      return next(new AppError(messages.PHONE_EXISTS.en, 409));
     }
 
     const hashedPassword = await bcrypt.hash(
@@ -89,7 +87,8 @@ export const registerOwner = async (req, res, next) => {
     const { password: _, ...userWithoutPassword } = newUser;
 
     res.status(201).json({
-      status: "success",
+      success: true,
+      message: messages.OWNER_REGISTERED_SUCCESSFULLY,
       data: userWithoutPassword,
     });
   } catch (error) {
@@ -115,16 +114,16 @@ export const registerAdmin = async (req, res, next) => {
     }
 
     if (!isValidName(name)) {
-      return next(new AppError("Invalid name format", 400));
+      return next(new AppError(messages.INVALID_NAME_FORMAT.en, 400));
     }
     if (!isValidEmail(email)) {
-      return next(new AppError("Invalid email format", 400));
+      return next(new AppError(messages.INVALID_EMAIL_FORMAT.en, 400));
     }
     if (!isValidPassword(password)) {
-      return next(new AppError("Weak password format", 400));
+      return next(new AppError(messages.WEAK_PASSWORD_FORMAT.en, 400));
     }
     if (!isValidPhone(phone)) {
-      return next(new AppError("Invalid phone format", 400));
+      return next(new AppError(messages.INVALID_PHONE_FORMAT.en, 400));
     }
 
     const roleId = "bd051127-e101-487b-8d65-9a71035c9e4c";
@@ -133,13 +132,13 @@ export const registerAdmin = async (req, res, next) => {
       where: { id: roleId },
     });
     if (!existingRole) {
-      return next(new AppError("Role does not exist", 400));
+      return next(new AppError(messages.ROLE_DOES_NOT_EXIST.en, 400));
     }
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
     if (existingUser) {
-      return next(new AppError("Email already in use", 409));
+      return next(new AppError(messages.EMAIL_EXISTS.en, 409));
     }
 
     const existingPhone = await prisma.user.findUnique({
@@ -147,7 +146,7 @@ export const registerAdmin = async (req, res, next) => {
     });
 
     if (existingPhone) {
-      return next(new AppError("Phone number already in use", 409));
+      return next(new AppError(messages.PHONE_EXISTS.en, 409));
     }
 
     const hashedPassword = await bcrypt.hash(
@@ -169,7 +168,8 @@ export const registerAdmin = async (req, res, next) => {
     const { password: _, ...userWithoutPassword } = newUser;
 
     res.status(201).json({
-      status: "success",
+      success: true,
+      message: messages.ADMIN_REGISTERED_SUCCESSFULLY,
       data: userWithoutPassword,
     });
   } catch (error) {
@@ -195,23 +195,23 @@ export const registerStaff = async (req, res, next) => {
     }
 
     if (!isValidName(name)) {
-      return next(new AppError("Invalid name format", 400));
+      return next(new AppError(messages.INVALID_NAME_FORMAT.en, 400));
     }
     if (!isValidEmail(email)) {
-      return next(new AppError("Invalid email format", 400));
+      return next(new AppError(messages.INVALID_EMAIL_FORMAT.en, 400));
     }
     if (!isValidPassword(password)) {
-      return next(new AppError("Weak password format", 400));
+      return next(new AppError(messages.WEAK_PASSWORD_FORMAT.en, 400));
     }
     if (!isValidPhone(phone)) {
-      return next(new AppError("Invalid phone format", 400));
+      return next(new AppError(messages.INVALID_PHONE_FORMAT.en, 400));
     }
 
     const existingBranch = await prisma.branch.findUnique({
       where: { id: branchId },
     });
     if (!existingBranch) {
-      return next(new AppError("Branch does not exist", 400));
+      return next(new AppError(messages.BRANCH_DOES_NOT_EXIST.en, 400));
     }
 
     const roleId = "2884d176-7c61-4b09-81d2-d6d7269d4ad1";
@@ -220,13 +220,13 @@ export const registerStaff = async (req, res, next) => {
       where: { id: roleId },
     });
     if (!existingRole) {
-      return next(new AppError("Role does not exist", 400));
+      return next(new AppError(messages.ROLE_DOES_NOT_EXIST.en, 400));
     }
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
     if (existingUser) {
-      return next(new AppError("Email already in use", 409));
+      return next(new AppError(messages.EMAIL_EXISTS.en, 409));
     }
 
     const existingPhone = await prisma.user.findUnique({
@@ -234,7 +234,7 @@ export const registerStaff = async (req, res, next) => {
     });
 
     if (existingPhone) {
-      return next(new AppError("Phone number already in use", 409));
+      return next(new AppError(messages.PHONE_EXISTS.en, 409));
     }
 
     const hashedPassword = await bcrypt.hash(
@@ -269,8 +269,7 @@ export const registerStaff = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message:
-        "Staff registered successfully and created staff profile, please update your profile",
+      message: messages.STAFF_REGISTERED_SUCCESSFULLY,
       data: userWithoutPassword,
       staffProfile: staffProfile,
     });
@@ -282,9 +281,7 @@ export const registerStaff = async (req, res, next) => {
 export const registerDeveloper = async (req, res, next) => {
   try {
     if (req.user.roleName !== "DEVELOPER") {
-      return next(
-        new AppError("Forbidden: Only DEVELOPER can register developers", 403),
-      );
+      return next(new AppError(messages.FORBIDDEN.en, 403));
     }
     const { name, phone, email, password } = req.body;
 
@@ -302,16 +299,16 @@ export const registerDeveloper = async (req, res, next) => {
     }
 
     if (!isValidName(name)) {
-      return next(new AppError("Invalid name format", 400));
+      return next(new AppError(messages.INVALID_NAME_FORMAT.en, 400));
     }
     if (!isValidEmail(email)) {
-      return next(new AppError("Invalid email format", 400));
+      return next(new AppError(messages.INVALID_EMAIL_FORMAT.en, 400));
     }
     if (!isValidPassword(password)) {
-      return next(new AppError("Weak password format", 400));
+      return next(new AppError(messages.WEAK_PASSWORD_FORMAT.en, 400));
     }
     if (!isValidPhone(phone)) {
-      return next(new AppError("Invalid phone format", 400));
+      return next(new AppError(messages.INVALID_PHONE_FORMAT.en, 400));
     }
 
     const roleId = "022f21b0-c85d-4920-9cbb-34e2b7689666";
@@ -320,13 +317,13 @@ export const registerDeveloper = async (req, res, next) => {
       where: { id: roleId },
     });
     if (!existingRole) {
-      return next(new AppError("Role does not exist", 400));
+      return next(new AppError(messages.ROLE_DOES_NOT_EXIST.en, 400));
     }
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
     if (existingUser) {
-      return next(new AppError("Email already in use", 409));
+      return next(new AppError(messages.EMAIL_EXISTS.en, 409));
     }
 
     const existingPhone = await prisma.user.findUnique({
@@ -334,7 +331,7 @@ export const registerDeveloper = async (req, res, next) => {
     });
 
     if (existingPhone) {
-      return next(new AppError("Phone number already in use", 409));
+      return next(new AppError(messages.PHONE_EXISTS.en, 409));
     }
 
     const hashedPassword = await bcrypt.hash(
@@ -382,11 +379,11 @@ export const login = async (req, res, next) => {
       where: { email },
     });
     if (!user) {
-      return next(new AppError("Invalid email", 401));
+      return next(new AppError(messages.USER_NOT_FOUND.en, 401));
     }
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return next(new AppError("Invalid password", 401));
+      return next(new AppError(messages.INVALID_PASSWORD.en, 401));
     }
 
     // eslint-disable-next-line no-unused-vars
@@ -408,7 +405,8 @@ export const login = async (req, res, next) => {
     );
 
     res.status(200).json({
-      status: "success",
+      success: true,
+      message: messages.LOGGED_IN_SUCCESSFULLY,
       data: userWithoutPassword,
       token,
     });
@@ -424,7 +422,7 @@ export const logout = async (req, res, next) => {
     const decoded = jwt.decode(token);
 
     if (!decoded) {
-      return next(new AppError("Invalid token", 401));
+      return next(new AppError(messages.INVALID_TOKEN.en, 401));
     }
 
     //TODO: make it in v2
@@ -437,8 +435,8 @@ export const logout = async (req, res, next) => {
       },
     });
     res.status(200).json({
-      status: "success",
-      message: "Logged out successfully",
+      success: true,
+      message: messages.LOGGED_OUT_SUCCESSFULLY,
     });
   } catch (error) {
     next(error);
@@ -464,10 +462,10 @@ export const forgetPassword = async (req, res, next) => {
       user.password,
     );
     if (!isPasswordValid) {
-      return next(new AppError("Current password is incorrect", 401));
+      return next(new AppError(messages.INVALID_PASSWORD.en, 401));
     }
     if (!isValidPassword(newPassword)) {
-      return next(new AppError("Weak password format", 400));
+      return next(new AppError(messages.WEAK_PASSWORD_FORMAT.en, 400));
     }
     const hashedPassword = await bcrypt.hash(
       newPassword,

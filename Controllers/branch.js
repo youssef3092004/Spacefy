@@ -2,6 +2,7 @@ import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
 import { pagination } from "../utils/pagination.js";
 import { compressAndUpload } from "../utils/cloudinary.js";
+import { messages } from "../locales/message.js";
 
 const timeToDate = (time) => {
   return new Date(`2026-01-01T${time}:00.000Z`);
@@ -27,17 +28,17 @@ export const createBranch = async (req, res, next) => {
     };
 
     if (parseTimeToMinutes(openingTime) >= parseTimeToMinutes(closingTime)) {
-      return next(
-        new AppError("Opening time must be before closing time", 400),
-      );
+      return next(new AppError(messages.INVALID_TIME_RANGE.en, 400));
     }
 
     const existingBusiness = await prisma.business.findUnique({
       where: { id: businessId },
     });
-    if (!existingBusiness) return next(new AppError("Business not found", 404));
-
-    if (!req.file) return next(new AppError("Branch image is required", 400));
+    if (!existingBusiness)
+      return next(new AppError(messages.BUSINESS_NOT_FOUND.en, 404));
+    //todo: fix image not required
+    if (!req.file)
+      return next(new AppError(messages.BRANCH_IMAGE_REQUIRED.en, 400));
 
     const uploadResult = await compressAndUpload(req.file.buffer, "branches");
 
@@ -52,7 +53,11 @@ export const createBranch = async (req, res, next) => {
       },
     });
 
-    res.status(201).json({ status: "success", data: newBranch });
+    res.status(201).json({
+      success: true,
+      message: messages.BRANCH_CREATED_SUCCESSFULLY,
+      data: newBranch,
+    });
   } catch (err) {
     next(err);
   }
@@ -62,16 +67,17 @@ export const getBranchById = async (req, res, next) => {
   try {
     const { branchId } = req.params;
     if (!branchId) {
-      return next(new AppError("Branch ID is required", 400));
+      return next(new AppError(messages.BRANCH_REQUIRED.en, 400));
     }
     const branch = await prisma.branch.findUnique({
       where: { id: branchId },
     });
     if (!branch) {
-      return next(new AppError("Branch not found", 404));
+      return next(new AppError(messages.BRANCH_DOES_NOT_EXIST.en, 404));
     }
     res.status(200).json({
-      status: "success",
+      success: true,
+      message: messages.DATA_FOUND_SUCCESSFULLY,
       data: branch,
       source: "database",
     });
@@ -92,11 +98,12 @@ export const getAllBranches = async (req, res, next) => {
       prisma.branch.count(),
     ]);
     if (!branches.length) {
-      return next(new AppError("No branches found", 404));
+      return next(new AppError(messages.NO_BRANCHES_FOUND.en, 404));
     }
     const totalPages = Math.ceil(total / limit);
     res.status(200).json({
-      status: "success",
+      success: true,
+      message: messages.DATA_FOUND_SUCCESSFULLY,
       data: branches,
       meta: {
         page,
@@ -117,13 +124,13 @@ export const getBranchesByBusinessId = async (req, res, next) => {
   try {
     const { businessId } = req.params;
     if (!businessId) {
-      return next(new AppError("Business ID is required", 400));
+      return next(new AppError(messages.BUSINESS_REQUIRED.en, 400));
     }
     const existingBusiness = await prisma.business.findUnique({
       where: { id: businessId },
     });
     if (!existingBusiness) {
-      return next(new AppError("Business not found", 404));
+      return next(new AppError(messages.BUSINESS_NOT_FOUND.en, 404));
     }
     const [branches, total] = await prisma.$transaction([
       prisma.branch.findMany({
@@ -134,10 +141,11 @@ export const getBranchesByBusinessId = async (req, res, next) => {
       }),
     ]);
     if (!branches.length) {
-      return next(new AppError("No branches found for this business", 404));
+      return next(new AppError(messages.NO_BRANCHES_FOUND.en, 404));
     }
     res.status(200).json({
-      status: "success",
+      success: true,
+      message: messages.DATA_FOUND_SUCCESSFULLY,
       data: branches,
       meta: {
         total,
@@ -154,13 +162,13 @@ export const updateBranchById = async (req, res, next) => {
     const { branchId } = req.params;
     const { name, address } = req.body;
     if (!branchId) {
-      return next(new AppError("Branch ID is required", 400));
+      return next(new AppError(messages.BRANCH_REQUIRED.en, 400));
     }
     const existingBranch = await prisma.branch.findUnique({
       where: { id: branchId },
     });
     if (!existingBranch) {
-      return next(new AppError("Branch not found", 404));
+      return next(new AppError(messages.BRANCH_DOES_NOT_EXIST.en, 404));
     }
     if (!name || !address) {
       return next(new AppError("Name and address are required", 400));
@@ -173,7 +181,8 @@ export const updateBranchById = async (req, res, next) => {
       },
     });
     res.status(200).json({
-      status: "success",
+      success: true,
+      message: messages.DATA_UPDATED_SUCCESSFULLY,
       data: updatedBranch,
       source: "database",
     });
@@ -186,13 +195,13 @@ export const updateBranchByIdPatch = async (req, res, next) => {
   try {
     const { branchId } = req.params;
     if (!branchId) {
-      return next(new AppError("Branch ID is required", 400));
+      return next(new AppError(messages.BRANCH_REQUIRED.en, 400));
     }
     const existingBranch = await prisma.branch.findUnique({
       where: { id: branchId },
     });
     if (!existingBranch || existingBranch.length === 0) {
-      return next(new AppError("Branch not found", 404));
+      return next(new AppError(messages.BRANCH_NOT_FOUND.en, 404));
     }
     const allowedFields = [
       "name",
@@ -206,18 +215,14 @@ export const updateBranchByIdPatch = async (req, res, next) => {
     if (updateData.openingTime) {
       const openingTime = updateData.openingTime;
       if (typeof openingTime !== "string") {
-        return next(
-          new AppError("Opening time must be a string in 'HH:MM' format", 400),
-        );
+        return next(new AppError(messages.INVALID_OPENING_TIME_FORMAT.en, 400));
       }
       updateData.openingTime = timeToDate(openingTime);
     }
     if (updateData.closingTime) {
       const closingTime = updateData.closingTime;
       if (typeof closingTime !== "string") {
-        return next(
-          new AppError("Closing time must be a string in 'HH:MM' format", 400),
-        );
+        return next(new AppError(messages.INVALID_CLOSING_TIME_FORMAT.en, 400));
       }
       updateData.closingTime = timeToDate(closingTime);
     }
@@ -232,7 +237,8 @@ export const updateBranchByIdPatch = async (req, res, next) => {
     });
 
     res.status(200).json({
-      status: "success",
+      success: true,
+      message: messages.DATA_UPDATED_SUCCESSFULLY,
       data: updatedBranch,
       source: "database",
     });
@@ -245,14 +251,14 @@ export const deleteBranchById = async (req, res, next) => {
   try {
     const { branchId } = req.params;
     if (!branchId) {
-      return next(new AppError("Branch ID is required", 400));
+      return next(new AppError(messages.BRANCH_REQUIRED.en, 400));
     }
 
     const branch = await prisma.branch.findUnique({
       where: { id: branchId },
     });
     if (!branch) {
-      return next(new AppError("Branch not found", 404));
+      return next(new AppError(messages.BRANCH_NOT_FOUND.en, 404));
     }
 
     await prisma.branch.delete({
@@ -260,8 +266,8 @@ export const deleteBranchById = async (req, res, next) => {
     });
 
     res.status(200).json({
-      status: "success",
-      message: "Branch deleted successfully",
+      success: true,
+      message: messages.DATA_DELETED_SUCCESSFULLY,
       source: "database",
     });
   } catch (error) {
@@ -273,11 +279,11 @@ export const deleteAllBranches = async (req, res, next) => {
   try {
     const deletedBranches = await prisma.branch.deleteMany({});
     if (deletedBranches.count === 0) {
-      return next(new AppError("No branches to delete", 404));
+      return next(new AppError(messages.BRANCH_NOT_FOUND.en, 404));
     }
     res.status(200).json({
-      status: "success",
-      message: "All branches deleted successfully",
+      success: true,
+      message: messages.DATA_DELETED_SUCCESSFULLY,
       count: deletedBranches.count,
       source: "database",
     });

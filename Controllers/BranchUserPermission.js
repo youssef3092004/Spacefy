@@ -1,6 +1,7 @@
 import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
 import { pagination } from "../utils/pagination.js";
+import { messages } from "../locales/message.js";
 
 export const createBranchUserPermission = async (req, res, next) => {
   try {
@@ -60,7 +61,7 @@ export const createBranchUserPermission = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: "Branch user permissions created successfully",
+      message: messages.BRANCH_USER_PERMISSIONS_CREATED_SUCCESSFULLY,
       insertedCount: result.count,
       totalRecords: total,
     });

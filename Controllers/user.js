@@ -10,6 +10,7 @@ import {
 } from "../utils/validation.js";
 import bcrypt from "bcrypt";
 import process from "process";
+import { messages } from "../locales/message.js";
 
 export const getAllUsers = async (req, res, next) => {
   try {
@@ -28,7 +29,7 @@ export const getAllUsers = async (req, res, next) => {
     ]);
 
     if (!users || users.length === 0) {
-      return next(new AppError("No users found", 404));
+      return next(new AppError(messages.USERS_NOT_FOUND.en, 404));
     }
 
     const totalPages = Math.ceil(total / limit);
@@ -38,6 +39,7 @@ export const getAllUsers = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
+      message: messages.DATA_FOUND_SUCCESSFULLY,
       data: usersWithoutPassword,
       meta: {
         page,
@@ -66,7 +68,7 @@ export const getUserById = async (req, res, next) => {
     });
 
     if (!user) {
-      return next(new AppError("User not found", 404));
+      return next(new AppError(messages.USER_NOT_FOUND.en, 404));
     }
 
     // eslint-disable-next-line no-unused-vars
@@ -90,7 +92,7 @@ export const deleteUserById = async (req, res, next) => {
       await prisma.user.delete({ where: { id } });
     } catch (error) {
       if (error.code === "P2025") {
-        return next(new AppError("User not found", 404));
+        return next(new AppError(messages.USER_NOT_FOUND.en, 404));
       }
       throw error;
     }
@@ -102,8 +104,8 @@ export const deleteUserById = async (req, res, next) => {
     }
 
     res.status(200).json({
-      status: "success",
-      message: "User deleted successfully",
+      success: true,
+      message: messages.DATA_DELETED_SUCCESSFULLY.en,
     });
   } catch (error) {
     next(error);
@@ -114,15 +116,15 @@ export const deleteAllUsers = async (req, res, next) => {
   try {
     const result = await prisma.user.deleteMany({});
     if (result.count === 0) {
-      return next(new AppError("No users to delete", 404));
+      return next(new AppError(messages.USERS_NOT_FOUND.en, 404));
     }
     const keys = await redisClient.keys("users:*");
     if (keys.length > 0) {
       await redisClient.del(keys);
     }
     res.status(200).json({
-      status: "success",
-      message: "All users deleted successfully",
+      success: true,
+      message: messages.DATA_DELETED_SUCCESSFULLY,
       count: result.count,
     });
   } catch (error) {
@@ -146,12 +148,7 @@ export const updateUserById = async (req, res, next) => {
     const updateData = { ...req.body };
     if (updateData.password) {
       if (!isValidPassword(updateData.password)) {
-        return next(
-          new AppError(
-            "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character.",
-            400,
-          ),
-        );
+        return next(new AppError(messages.WEAK_PASSWORD_FORMAT.en, 400));
       }
       updateData.password = bcrypt.hash(
         updateData.password,
@@ -160,25 +157,23 @@ export const updateUserById = async (req, res, next) => {
     }
     if (updateData.email) {
       if (!isValidEmail(updateData.email)) {
-        return next(new AppError("Invalid email format", 400));
+        return next(new AppError(messages.INVALID_EMAIL_FORMAT.en, 400));
       }
       const emailInUse = await prisma.user.findUnique({
         where: { email: updateData.email },
       });
       if (emailInUse && emailInUse.id !== id) {
-        return next(
-          new AppError("Email is already in use by another user", 409),
-        );
+        return next(new AppError(messages.EMAIL_EXISTS.en, 409));
       }
     }
     if (updateData.phone) {
       if (!isValidPhone(updateData.phone)) {
-        return next(new AppError("Invalid phone format", 400));
+        return next(new AppError(messages.INVALID_PHONE_FORMAT.en, 400));
       }
     }
     if (updateData.name) {
       if (!isValidName(updateData.name)) {
-        return next(new AppError("Invalid name format", 400));
+        return next(new AppError(messages.INVALID_NAME_FORMAT.en, 400));
       }
     }
     if (updateData.roleId) {
@@ -186,25 +181,20 @@ export const updateUserById = async (req, res, next) => {
         where: { id: updateData.roleId },
       });
       if (!role) {
-        return next(new AppError("Role not found", 404));
+        return next(new AppError(messages.ROLE_DOES_NOT_EXIST.en, 404));
       }
       if (
         role.name === "DEVELOPER" ||
         (role.name === "OWNER" && req.user.roleName !== "DEVELOPER")
       ) {
-        return next(
-          new AppError(
-            "Forbidden: Cannot assign DEVELOPER or OWNER role to a user",
-            403,
-          ),
-        );
+        return next(new AppError(messages.FORBIDDEN.en, 403));
       }
     }
     const keys = Object.keys(updateData).filter(
       (key) => !allowedFields.includes(key),
     );
     if (keys.length === 0) {
-      return next(new AppError("No valid fields to update", 400));
+      return next(new AppError(messages.NO_VALID_FIELDS_TO_UPDATE.en, 400));
     }
     const updatedUser = await prisma.user.update({
       where: { id },
@@ -219,7 +209,8 @@ export const updateUserById = async (req, res, next) => {
       await redisClient.del(cacheKeys);
     }
     res.status(200).json({
-      status: "success",
+      success: true,
+      message: messages.DATA_UPDATED_SUCCESSFULLY,
       data: updatedUser,
     });
   } catch (error) {
@@ -231,7 +222,7 @@ export const getUserByRoleName = async (req, res, next) => {
   try {
     let { roleName } = req.params;
     if (!roleName) {
-      return next(new AppError("Role name is required", 400));
+      return next(new AppError(messages.ROLE_REQUIRED.en, 400));
     }
     roleName = String(roleName).toUpperCase();
     const { page, limit, skip, sort, order } = pagination(req);
@@ -239,7 +230,7 @@ export const getUserByRoleName = async (req, res, next) => {
       where: { name: roleName },
     });
     if (!role) {
-      return next(new AppError("Role not found", 404));
+      return next(new AppError(messages.ROLE_DOES_NOT_EXIST.en, 404));
     }
     const users = await prisma.user.findMany({
       where: { roleId: role.id },
@@ -251,11 +242,12 @@ export const getUserByRoleName = async (req, res, next) => {
       where: { roleId: role.id },
     });
     if (!users.length) {
-      return next(new AppError("No users found for this role", 404));
+      return next(new AppError(messages.USERS_NOT_FOUND.en, 404));
     }
     const totalPages = Math.ceil(total / limit);
     res.status(200).json({
       success: true,
+      message: messages.DATA_FOUND_SUCCESSFULLY,
       data: users,
       meta: {
         page,
@@ -288,12 +280,13 @@ export const getMe = async (req, res, next) => {
       },
     });
     if (!user) {
-      return next(new AppError("User not found", 404));
+      return next(new AppError(messages.USER_NOT_FOUND.en, 404));
     }
     // eslint-disable-next-line no-unused-vars
     const userWithoutPassword = (({ password, ...rest }) => rest)(user);
     res.status(200).json({
       success: true,
+      message: messages.DATA_FOUND_SUCCESSFULLY,
       data: userWithoutPassword,
       source: "database",
     });
