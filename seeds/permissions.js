@@ -57,6 +57,11 @@ const PERMISSIONS = [
   { name: "UPDATE-SPACES", description: "Update spaces" },
   { name: "DELETE-SPACES", description: "Delete spaces" },
 
+  { name: "CREATE-PRICING-RULES", description: "Create pricing rules" },
+  { name: "VIEW-PRICING-RULES", description: "View pricing rules" },
+  { name: "UPDATE-PRICING-RULES", description: "Update pricing rules" },
+  { name: "DELETE-PRICING-RULES", description: "Delete pricing rules" },
+
   { name: "CREATE-STAFF-PROFILES", description: "Create staff profiles" },
   { name: "VIEW-STAFF-PROFILES", description: "View staff profiles" },
   { name: "UPDATE-STAFF-PROFILES", description: "Update staff profiles" },

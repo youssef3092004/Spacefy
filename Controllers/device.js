@@ -5,8 +5,10 @@ import { pagination } from "../utils/pagination.js";
 const DeviceType = [
   "PC",
   "LAPTOP",
-  "PS4",
-  "PS5",
+  "PS4_2",
+  "PS4_4",
+  "PS5_2",
+  "PS5_4",
   "XBOX_ONE",
   "XBOX_SERIES_S",
   "XBOX_SERIES_X",
@@ -23,11 +25,34 @@ const DeviceType = [
   "OTHER",
 ];
 
+const PricingType = ["PER_HOUR", "PER_SESSION", "PER_GAME"];
+
+const fixType = (type) => {
+  if (!DeviceType.includes(String(type).toUpperCase())) {
+    throw new AppError("Invalid device type", 400);
+  }
+  return (type = String(type).toUpperCase());
+};
+
+const fixPriceType = (priceType) => {
+  if (!PricingType.includes(String(priceType).toUpperCase())) {
+    throw new AppError("Invalid price type", 400);
+  }
+  return (priceType = String(priceType).toUpperCase());
+};
+
 export const createDevice = async (req, res, next) => {
   try {
-    const { branchId, spaceId, type, customTypeLabel, hourlyPrice, isActive } =
-      req.body;
-    const requiredFields = { branchId, spaceId, type, hourlyPrice };
+    const {
+      branchId,
+      spaceId,
+      type,
+      customTypeLabel,
+      priceType,
+      price,
+      isActive,
+    } = req.body;
+    const requiredFields = { branchId, spaceId, type, price };
     for (const i in requiredFields) {
       if (!requiredFields[i]) {
         return next(
@@ -38,21 +63,35 @@ export const createDevice = async (req, res, next) => {
         );
       }
     }
-    if (!DeviceType.includes(type)) {
-      return next(new AppError("Invalid device type", 400));
-    }
-    if (customTypeLabel && type !== "OTHER") {
+    const fixedType = fixType(type);
+    if (customTypeLabel && fixedType !== "OTHER") {
       return next(
         new AppError("customTypeLabel can only be set when type is OTHER", 400),
       );
     }
+
+    const existingSpace = await prisma.space.findUnique({
+      where: { id: spaceId },
+    });
+
+    if (!existingSpace || existingSpace === 0) {
+      return next(new AppError("Space not found", 404));
+    }
+
+    if (existingSpace.branchId !== branchId) {
+      return next(
+        new AppError("Space does not belong to the specified branch", 400),
+      );
+    }
+
     const device = await prisma.device.create({
       data: {
         branchId,
         spaceId,
-        type,
+        type: fixedType,
         customTypeLabel,
-        hourlyPrice,
+        priceType: fixPriceType(priceType || "PER_HOUR"),
+        price: price || 0,
         isActive: isActive !== undefined ? isActive : true,
       },
     });
@@ -64,12 +103,21 @@ export const createDevice = async (req, res, next) => {
 
 export const getDeviceById = async (req, res, next) => {
   try {
-    const { deviceId } = req.params;
+    const { branchId, deviceId } = req.params;
     if (!deviceId) {
       return next(new AppError("Device ID is required", 400));
     }
+    if (!branchId) {
+      return next(new AppError("Branch ID is required", 400));
+    }
+    const existingBranch = await prisma.branch.findUnique({
+      where: { id: branchId },
+    });
+    if (!existingBranch || existingBranch === 0) {
+      return next(new AppError("Branch not found", 404));
+    }
     const device = await prisma.device.findUnique({
-      where: { id: deviceId },
+      where: { id: deviceId, branchId: branchId },
     });
     if (!device || device === 0) {
       return next(new AppError("Device not found", 404));
@@ -82,15 +130,10 @@ export const getDeviceById = async (req, res, next) => {
 
 export const getAllDevices = async (req, res, next) => {
   try {
-    const { branchId } = req.params;
-    if (!branchId) {
-      return next(new AppError("Branch ID is required", 400));
-    }
-    const existingBranch = await prisma.branch.findUnique({
-      where: { id: branchId },
-    });
-    if (!existingBranch) {
-      return next(new AppError("Branch not found", 404));
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(
+        new AppError("Developers can only view devices in their branch", 403),
+      );
     }
     const { page, limit, skip, order, sort } = pagination(req);
     const [devices, total] = await prisma.$transaction([
@@ -98,9 +141,8 @@ export const getAllDevices = async (req, res, next) => {
         skip: skip,
         take: limit,
         orderBy: { [sort]: order },
-        where: branchId ? { branchId } : {},
       }),
-      prisma.device.count({ where: branchId ? { branchId } : {} }),
+      prisma.device.count(),
     ]);
     const totalPages = Math.ceil(total / limit);
     res.status(200).json({
@@ -193,7 +235,8 @@ export const updateDeviceById = async (req, res, next) => {
     const allowedUpdates = [
       "type",
       "customTypeLabel",
-      "hourlyPrice",
+      "priceType",
+      "price",
       "isActive",
     ];
     const updates = { ...req.body };
@@ -204,6 +247,7 @@ export const updateDeviceById = async (req, res, next) => {
       return next(new AppError("No valid fields to update", 400));
     }
     if (updates.type) {
+      updates.type = fixType(updates.type);
       if (!DeviceType.includes(updates.type)) {
         return next(new AppError("Invalid device type", 400));
       }
@@ -218,6 +262,12 @@ export const updateDeviceById = async (req, res, next) => {
     }
     if (updates.isActive !== undefined) {
       updates.isActive = Boolean(updates.isActive);
+    }
+    if (updates.priceType) {
+      updates.priceType = fixPriceType(updates.priceType);
+    }
+    if (updates.price !== undefined) {
+      updates.price = Number(updates.price);
     }
     const existingDevice = await prisma.device.findUnique({
       where: { id: deviceId },
@@ -258,8 +308,47 @@ export const deleteDeviceById = async (req, res, next) => {
   }
 };
 
+export const deleteDevicesByBranchId = async (req, res, next) => {
+  try {
+    if (req.user.roleName !== "DEVELOPER" && req.user.roleName !== "OWNER") {
+      return next(
+        new AppError(
+          "Only developers and owners can delete devices by branch",
+          403,
+        ),
+      );
+    }
+    const { branchId } = req.params;
+    if (!branchId) {
+      return next(new AppError("Branch ID is required", 400));
+    }
+    const existingBranch = await prisma.branch.findUnique({
+      where: { id: branchId },
+    });
+    if (!existingBranch || existingBranch === 0) {
+      return next(new AppError("Branch not found", 404));
+    }
+    const result = await prisma.device.deleteMany({
+      where: { branchId: branchId },
+    });
+    if (!result || result.count === 0) {
+      return next(new AppError("No devices to delete for this branch", 404));
+    }
+    res.status(200).json({
+      status: "success",
+      message: `devices deleted successfully for branch`,
+      count: result.count,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const deleteAllDevices = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(new AppError("Only developers can delete all devices", 403));
+    }
     const result = await prisma.device.deleteMany({});
     if (!result || result.count === 0) {
       return next(new AppError("No devices to delete", 404));

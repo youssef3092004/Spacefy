@@ -76,6 +76,12 @@ enum DeviceType {
   OTHER
 }
 
+enum PricingType {
+  PER_HOUR
+  PER_SESSION
+  PER_GAME
+}
+
 // fix it to branch not business
 model BusinessSettings {
   id         String @id @default(uuid())
@@ -299,31 +305,34 @@ model Space {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  branch  Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
   // plan         Plan          @relation(fields: [planId], references: [id])
   // pricingRules PricingRule[]
   // @@index([planId])
-  devices Device[]
+  devices      Device[]
+  pricingRules PricingRule[]
 
   @@index([branchId])
 }
 
 model Device {
-  id              String     @id @default(uuid())
+  id              String      @id @default(uuid())
   branchId        String
   // planId          String
   spaceId         String?
   type            DeviceType
   customTypeLabel String?
-  image           String     @default("https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=")
-  hourlyPrice     Decimal    @db.Decimal(10, 2)
-  isActive        Boolean    @default(true)
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  image           String      @default("https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=")
+  priceType       PricingType @default(PER_HOUR)
+  price           Decimal     @default(0) @db.Decimal(10, 2)
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
-  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  space  Space? @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  space        Space?        @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   // @@index([planId])
+  pricingRules PricingRule[]
 
   // plan   Plan   @relation(fields: [planId], references: [id])
   @@index([branchId])
@@ -337,7 +346,7 @@ model Tool {
 
   name            String
   image           String  @default("https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=")
-  pricePerSession Decimal
+  pricePerSession Decimal @db.Decimal(10, 2)
   isActive        Boolean @default(true)
 
   /**
@@ -345,16 +354,54 @@ model Tool {
    */
   createdBy String
   updatedBy String
-  deletedAt DateTime
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
   // plan         Plan          @relation(fields: [planId], references: [id])
   // pricingRules PricingRule[]
+  pricingRules PricingRule[]
 
   @@index([branchId])
   // @@index([planId])
   @@index([deletedAt])
+}
+
+model PricingRule {
+  id   String @id @default(uuid())
+  name String
+
+  pricingType PricingType
+
+  minDurationMinutes Int?
+  maxDurationMinutes Int?
+
+  minPlayers Int?
+  maxPlayers Int?
+
+  price    Decimal @db.Decimal(10, 2)
+  currency String  @default("EGP")
+
+  isActive  Boolean @default(true)
+  isPackage Boolean @default(false)
+
+  // Target (ONLY ONE should be set)
+  spaceId  String?
+  deviceId String?
+  toolId   String?
+
+  space  Space?  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  tool   Tool?   @relation(fields: [toolId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([spaceId])
+  @@index([deviceId])
+  @@index([toolId])
+  @@index([isActive])
+  @@index([isPackage])
 }

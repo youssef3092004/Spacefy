@@ -8,23 +8,28 @@ import {
   updateSpaceById,
   deleteSpaceById,
   deleteAllSpaces,
+  deleteSpacesByBranchId,
 } from "../controllers/space.js";
 import { verifyToken } from "../middleware/auth.js";
 import { cacheMiddleware } from "../middleware/cache.js";
 import { checkPermission } from "../middleware/checkPermission.js";
+import { checkOwnership } from "../middleware/checkOwnership.js";
+import { upload } from "../middleware/multer.js";
 
 const router = Router();
 
 router.post(
   "/create",
   verifyToken,
-  checkPermission("CREATE-SPACES"),
+  checkPermission("CREATE-SPACES", true),
+  upload.single("image"),
   createSpace,
 );
 router.get(
   "/getAll/:branchId",
   verifyToken,
-  checkPermission("VIEW-SPACES"),
+  checkPermission("VIEW-SPACES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
   cacheMiddleware(
     (req) =>
       `spaces:page=${req.query.page || 1}:limit=${req.query.limit || 10}:branchId=${
@@ -37,18 +42,21 @@ router.get(
   getAllSpaces,
 );
 router.get(
-  "/getById/:spaceId",
+  "/getById/:branchId/:spaceId",
   verifyToken,
-  checkPermission("VIEW-SPACES"),
+  checkPermission("VIEW-SPACES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
   cacheMiddleware((req) => `space:${req.params.spaceId}`, "TTL_BY_ID"),
   getSpaceById,
 );
 router.get(
   "/getByIsActive/:branchId/:isActive",
   verifyToken,
-  checkPermission("VIEW-SPACES"),
+  checkPermission("VIEW-SPACES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
   cacheMiddleware(
-    (req) => `spaces:branchId=${req.params.branchId}:isActive=${req.params.isActive}`,
+    (req) =>
+      `spaces:branchId=${req.params.branchId}:isActive=${req.params.isActive}`,
     "TTL_LIST",
   ),
   getSpaceByIsActive,
@@ -56,20 +64,26 @@ router.get(
 router.get(
   "/getByType/:branchId/:type",
   verifyToken,
-  checkPermission("VIEW-SPACES"),
-  cacheMiddleware((req) => `spaces:branchId=${req.params.branchId}:type=${req.params.type}`, "TTL_LIST"),
+  checkPermission("VIEW-SPACES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
+  cacheMiddleware(
+    (req) => `spaces:branchId=${req.params.branchId}:type=${req.params.type}`,
+    "TTL_LIST",
+  ),
   getSpacesByType,
 );
 router.patch(
-  "/update/:spaceId",
+  "/update/:branchId/:spaceId",
   verifyToken,
-  checkPermission("UPDATE-SPACES"),
+  checkPermission("UPDATE-SPACES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
   updateSpaceById,
 );
 router.delete(
-  "/delete/:spaceId",
+  "/delete/:branchId/:spaceId",
   verifyToken,
-  checkPermission("DELETE-SPACES"),
+  checkPermission("DELETE-SPACES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
   deleteSpaceById,
 );
 router.delete(
@@ -77,6 +91,13 @@ router.delete(
   verifyToken,
   checkPermission("DELETE-SPACES"),
   deleteAllSpaces,
+);
+router.delete(
+  "/deleteAllByBranchId/:branchId",
+  verifyToken,
+  checkPermission("DELETE-SPACES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
+  deleteSpacesByBranchId,
 );
 
 export default router;

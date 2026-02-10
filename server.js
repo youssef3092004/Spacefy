@@ -59,6 +59,7 @@ import payrollRouter from "./routes/payroll.js";
 import spaceRouter from "./routes/space.js";
 import deviceRouter from "./routes/device.js";
 import toolRouter from "./routes/tools.js";
+import pricingRulesRouter from "./routes/pricingRules.js";
 
 import seedRouter from "./seeds/permissions.js";
 import getPermissionIdsByNameRouter from "./seeds/getPermissionsId.js";
@@ -78,6 +79,7 @@ app.use("/api/v1/payrolls", payrollRouter);
 app.use("/api/v1/spaces", spaceRouter);
 app.use("/api/v1/devices", deviceRouter);
 app.use("/api/v1/tools", toolRouter);
+app.use("/api/v1/pricing-rules", pricingRulesRouter);
 
 app.use("/api/v1/seed-permissions", seedRouter);
 app.use("/api/v1/seed-permissions", getPermissionIdsByNameRouter);

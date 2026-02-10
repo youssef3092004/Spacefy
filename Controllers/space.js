@@ -1,8 +1,16 @@
 import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
 import { pagination } from "../utils/pagination.js";
+import { compressAndUpload } from "../utils/cloudinary.js";
 
 const SpaceType = ["PRIVATE", "PUBLIC", "DESK", "MEETING", "VIP", "OTHER"];
+
+const fixType = (type) => {
+  if (!SpaceType.includes(String(type).toUpperCase())) {
+    throw new AppError("Invalid space type", 400);
+  }
+  return (type = String(type).toUpperCase());
+};
 
 export const createSpace = async (req, res, next) => {
   try {
@@ -26,22 +34,35 @@ export const createSpace = async (req, res, next) => {
       return next(new AppError("Branch not found", 404));
     }
 
-    if (!SpaceType.includes(type)) {
-      return next(new AppError("Invalid space type", 400));
-    }
-    if (customTypeLabel && type !== "OTHER") {
+    const normalizedType = fixType(type);
+
+    if (customTypeLabel && normalizedType !== "OTHER") {
       return next(
         new AppError("customTypeLabel can only be set when type is OTHER", 400),
       );
     }
+
+    let imageUrl =
+      "https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=";
+
+    if (req.file) {
+      try {
+        const uploadResult = await compressAndUpload(req.file.buffer, "spaces");
+        imageUrl = uploadResult.secure_url;
+      } catch (error) {
+        return next(error);
+      }
+    }
+
     const newSpace = await prisma.space.create({
       data: {
         branchId,
         name,
-        type,
+        type: normalizedType,
         capacity,
         isActive: isActive !== undefined ? isActive : true,
         customTypeLabel,
+        image: imageUrl,
       },
     });
     res.status(201).json({
@@ -55,7 +76,10 @@ export const createSpace = async (req, res, next) => {
 
 export const getSpaceById = async (req, res, next) => {
   try {
-    const { spaceId } = req.params;
+    const { branchId, spaceId } = req.params;
+    if (!branchId) {
+      return next(new AppError("Branch ID is required", 400));
+    }
     if (!spaceId) {
       return next(new AppError("Space ID is required", 400));
     }
@@ -178,7 +202,10 @@ export const getSpacesByType = async (req, res, next) => {
 
 export const deleteSpaceById = async (req, res, next) => {
   try {
-    const { spaceId } = req.params;
+    const { branchId, spaceId } = req.params;
+    if (!branchId) {
+      return next(new AppError("Branch ID is required", 400));
+    }
     if (!spaceId) {
       return next(new AppError("Space ID is required", 400));
     }
@@ -199,8 +226,46 @@ export const deleteSpaceById = async (req, res, next) => {
   }
 };
 
+export const deleteSpacesByBranchId = async (req, res, next) => {
+  try {
+    if (req.user.roleName !== "DEVELOPER" && req.user.roleName !== "OWNER") {
+      return next(
+        new AppError("Unauthorized to delete spaces for this branch", 403),
+      );
+    }
+    const { branchId } = req.params;
+    if (!branchId) {
+      return next(new AppError("Branch ID is required", 400));
+    }
+    const existingBranch = await prisma.branch.findUnique({
+      where: { id: branchId },
+    });
+    if (!existingBranch || existingBranch === 0) {
+      return next(new AppError("Branch not found", 404));
+    }
+    const result = await prisma.space.deleteMany({
+      where: { branchId },
+    });
+    if (!result.count || result.count === 0) {
+      return next(
+        new AppError("No space records to delete for this branch", 404),
+      );
+    }
+    res.status(200).json({
+      status: "success",
+      message: `Deleted spaces Successfully`,
+      count: result.count,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const deleteAllSpaces = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(new AppError("Unauthorized to delete all spaces", 403));
+    }
     const result = await prisma.space.deleteMany({});
     if (!result.count || result.count === 0) {
       return next(new AppError("No space records to delete", 404));
@@ -217,7 +282,13 @@ export const deleteAllSpaces = async (req, res, next) => {
 
 export const updateSpaceById = async (req, res, next) => {
   try {
-    const { spaceId } = req.params;
+    const { branchId, spaceId } = req.params;
+    if (!branchId) {
+      return next(new AppError("Branch ID is required", 400));
+    }
+    if (!spaceId) {
+      return next(new AppError("Space ID is required", 400));
+    }
     const allowedUpdates = [
       "name",
       "type",

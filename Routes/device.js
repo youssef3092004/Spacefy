@@ -8,6 +8,7 @@ import {
   updateDeviceById,
   deleteDeviceById,
   deleteAllDevices,
+  deleteDevicesByBranchId,
 } from "../controllers/device.js";
 import { verifyToken } from "../middleware/auth.js";
 import { cacheMiddleware } from "../middleware/cache.js";
@@ -19,12 +20,13 @@ const router = Router();
 router.post(
   "/create",
   verifyToken,
-  checkPermission("CREATE-DEVICES"),
+  checkPermission("CREATE-DEVICES", true),
   createDevice,
 );
 router.get(
-  "/getAll/:branchId",
+  "/getAll",
   verifyToken,
+  checkPermission("VIEW-DEVICES"),
   cacheMiddleware(
     (req) =>
       `devices:page=${req.query.page || 1}:limit=${req.query.limit || 10}:branchId=${
@@ -32,53 +34,58 @@ router.get(
       }:type=${req.query.type || "all"}`,
     "TTL_LIST",
   ),
-  checkPermission("VIEW-DEVICES"),
-  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
   getAllDevices,
 );
 router.get(
-  "/getById/:deviceId",
+  "/getById/:branchId/:deviceId",
   verifyToken,
-  cacheMiddleware((req) => `device:${req.params.deviceId}`, "TTL_BY_ID"),
-  checkPermission("VIEW-DEVICES"),
+  checkPermission("VIEW-DEVICES", true),
   checkOwnership({ model: "device", paramId: "deviceId", scope: "device" }),
+  cacheMiddleware((req) => `device:${req.params.deviceId}`, "TTL_BY_ID"),
   getDeviceById,
 );
 router.get(
   "/getByType/:branchId/:type",
   verifyToken,
+  checkPermission("VIEW-DEVICES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
   cacheMiddleware(
     (req) => `devices:branchId=${req.params.branchId}:type=${req.params.type}`,
     "TTL_LIST",
   ),
-  checkPermission("VIEW-DEVICES"),
-  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
   getDevicesByType,
 );
 router.get(
   "/getAllByBranchId/:branchId",
   verifyToken,
+  checkPermission("VIEW-DEVICES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
   cacheMiddleware(
     (req) => `devices:branchId=${req.params.branchId}`,
     "TTL_LIST",
   ),
-  checkPermission("VIEW-DEVICES"),
-  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
   getAllByBranchId,
 );
 router.patch(
-  "/update/:deviceId",
+  "/update/:branchId/:deviceId",
   verifyToken,
-  checkPermission("UPDATE-DEVICES"),
+  checkPermission("UPDATE-DEVICES", true),
   checkOwnership({ model: "device", paramId: "deviceId", scope: "device" }),
   updateDeviceById,
 );
 router.delete(
-  "/delete/:deviceId",
+  "/delete/:branchId/:deviceId",
   verifyToken,
-  checkPermission("DELETE-DEVICES"),
+  checkPermission("DELETE-DEVICES", true),
   checkOwnership({ model: "device", paramId: "deviceId", scope: "device" }),
   deleteDeviceById,
+);
+router.delete(
+  "/deleteByBranchId/:branchId",
+  verifyToken,
+  checkPermission("DELETE-DEVICES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
+  deleteDevicesByBranchId,
 );
 router.delete(
   "/deleteAll/",
