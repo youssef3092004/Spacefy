@@ -97,7 +97,7 @@ export const getSpaceById = async (req, res, next) => {
   }
 };
 
-export const getAllSpaces = async (req, res, next) => {
+export const getAllByBranchId = async (req, res, next) => {
   try {
     const { branchId } = req.params;
     const { page, limit, skip, sort, order } = pagination(req);
@@ -117,7 +117,7 @@ export const getAllSpaces = async (req, res, next) => {
     }
     const totalPages = Math.ceil(total / limit);
     res.status(200).json({
-      status: "success",
+      success: true,
       data: spaces,
       meta: {
         total,

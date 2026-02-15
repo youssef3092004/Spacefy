@@ -1,9 +1,11 @@
 import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
 import { pagination } from "../utils/pagination.js";
+import { validatePrice } from "../utils/validation.js";
 
 const PricingType = ["PER_HOUR", "PER_SESSION"];
 const TargetFields = ["spaceId", "deviceId", "toolId"];
+const TargetModels = ["space", "device", "tool"];
 
 const ensureSingleTarget = (data) => {
   const targets = TargetFields.filter((field) => data[field]);
@@ -51,20 +53,6 @@ const validateRanges = ({
   ) {
     throw new AppError("minPlayers cannot exceed maxPlayers", 400);
   }
-};
-
-const validatePrice = (price) => {
-  if (price === undefined || price === null) {
-    throw new AppError("Price is required", 400);
-  }
-  const numericPrice = Number(price);
-  if (Number.isNaN(numericPrice) || !Number.isFinite(numericPrice)) {
-    throw new AppError("Price must be a valid number", 400);
-  }
-  if (numericPrice < 0) {
-    throw new AppError("Price must be >= 0", 400);
-  }
-  return numericPrice;
 };
 
 const validateTargetOwnership = async (branchId, data) => {
@@ -122,6 +110,12 @@ const resolveBranchId = (pricingRule) => {
 export const createPricingRule = async (req, res, next) => {
   try {
     const { branchId } = req.params;
+    if (!branchId) return next(new AppError("Branch ID is required", 400));
+    const branch = await prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { id: true },
+    });
+    if (!branch) return next(new AppError("Branch not found", 404));
     const {
       name,
       pricingType,
@@ -138,11 +132,25 @@ export const createPricingRule = async (req, res, next) => {
       toolId,
     } = req.body;
 
-    if (!branchId) return next(new AppError("Branch ID is required", 400));
-    if (!name) return next(new AppError("Name is required", 400));
-    if (!pricingType) return next(new AppError("pricingType is required", 400));
-    if (!PricingType.includes(pricingType)) {
-      return next(new AppError("Invalid pricingType", 400));
+    const requiredFields = {
+      name,
+      pricingType,
+      minDurationMinutes,
+      maxDurationMinutes,
+      minPlayers,
+      maxPlayers,
+      price,
+    };
+
+    for (let i in requiredFields) {
+      if (!requiredFields[i]) {
+        return next(
+          new AppError(
+            `${i.charAt(0).toUpperCase() + i.slice(1)} is required`,
+            400,
+          ),
+        );
+      }
     }
 
     validateRanges({
@@ -154,6 +162,24 @@ export const createPricingRule = async (req, res, next) => {
     const numericPrice = validatePrice(price);
 
     await validateTargetOwnership(branchId, { spaceId, deviceId, toolId });
+
+    const existingRule = await prisma.pricingRule.findFirst({
+      where: {
+        OR: [{ spaceId }, { deviceId }, { toolId }],
+        name,
+        space: spaceId ? { branchId } : undefined,
+        device: deviceId ? { branchId } : undefined,
+        tool: toolId ? { branchId } : undefined,
+      },
+    });
+    if (existingRule) {
+      return next(
+        new AppError(
+          "A pricing rule with the same name already exists for this target",
+          400,
+        ),
+      );
+    }
 
     const newRule = await prisma.pricingRule.create({
       data: {
@@ -219,69 +245,151 @@ export const getPricingRuleById = async (req, res, next) => {
   }
 };
 
+export const getPriceingRulesByTarget = async (req, res, next) => {
+  try {
+    const { branchId, target, targetId } = req.params;
+
+    if (!branchId) return next(new AppError("Branch ID is required", 400));
+    if (!target || !targetId)
+      return next(new AppError("Target and target ID are required", 400));
+
+    if (!TargetModels.includes(target)) {
+      return next(new AppError("Invalid target type", 400));
+    }
+
+    const existingTarget = await prisma[target].findFirst({
+      where: {
+        id: targetId,
+        branchId,
+      },
+    });
+    if (!existingTarget) {
+      return next(new AppError("Target not found or not accessible", 404));
+    }
+    const includeObj = {
+      space: target === "space" ? { select: { branchId: true } } : false,
+      device: target === "device" ? { select: { branchId: true } } : false,
+      tool: target === "tool" ? { select: { branchId: true } } : false,
+    };
+
+    const pricingRules = await prisma.pricingRule.findMany({
+      where: {
+        [target + "Id"]: targetId,
+      },
+      include: includeObj,
+    });
+    if (!pricingRules || pricingRules.length === 0) {
+      return next(new AppError("No pricing rules found for this target", 404));
+    }
+
+    // Verify each rule belongs to the correct branch
+    for (const rule of pricingRules) {
+      const ruleBranchId = resolveBranchId(rule);
+      if (!ruleBranchId || ruleBranchId !== branchId) {
+        return next(
+          new AppError(
+            "Pricing rule does not belong to the specified branch",
+            403,
+          ),
+        );
+      }
+    }
+    res.status(200).json({
+      status: "success",
+      message: "Pricing rules retrieved successfully",
+      data: pricingRules,
+      source: "database",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getAllPricingRules = async (req, res, next) => {
   try {
     const { branchId } = req.params;
-    if (!branchId) return next(new AppError("Branch ID is required", 400));
+    if (!branchId) {
+      return next(new AppError("Branch ID is required", 400));
+    }
 
     const { page, limit, skip, order, sort } = pagination(req);
     const { spaceId, deviceId, toolId, isActive, isPackage, pricingType } =
       req.query;
 
-    const targetFilters = [spaceId, deviceId, toolId].filter(Boolean);
-    if (targetFilters.length > 1) {
-      return next(new AppError("Only one target filter is allowed", 400));
+    const targets = [spaceId, deviceId, toolId].filter(Boolean);
+    if (targets.length > 1) {
+      return next(new AppError("Only one target filter allowed", 400));
     }
 
-    if (pricingType && !PricingType.includes(pricingType)) {
+    const parseBoolean = (value, field) => {
+      if (value === undefined) return undefined;
+      if (value === "true") return true;
+      if (value === "false") return false;
+      throw new AppError(`${field} must be true or false`, 400);
+    };
+
+    const parsedIsActive = parseBoolean(isActive, "isActive");
+    const parsedIsPackage = parseBoolean(isPackage, "isPackage");
+
+    if (pricingType && !Object.values(PricingType).includes(pricingType)) {
       return next(new AppError("Invalid pricingType", 400));
     }
 
-    const parsedIsActive =
-      isActive === undefined ? undefined : String(isActive) === "true";
-    if (
-      isActive !== undefined &&
-      String(isActive) !== "true" &&
-      String(isActive) !== "false"
-    ) {
-      return next(new AppError("isActive must be true or false", 400));
+    const allowedSortFields = ["createdAt", "price", "name"];
+    if (!allowedSortFields.includes(sort)) {
+      return next(new AppError("Invalid sort field", 400));
     }
 
-    const parsedIsPackage =
-      isPackage === undefined ? undefined : String(isPackage) === "true";
-    if (
-      isPackage !== undefined &&
-      String(isPackage) !== "true" &&
-      String(isPackage) !== "false"
-    ) {
-      return next(new AppError("isPackage must be true or false", 400));
-    }
-
-    const where = {
-      OR: [
-        { space: { branchId } },
-        { device: { branchId } },
-        { tool: { branchId } },
-      ],
-      ...(spaceId ? { spaceId } : {}),
-      ...(deviceId ? { deviceId } : {}),
-      ...(toolId ? { toolId } : {}),
-      ...(pricingType ? { pricingType } : {}),
-      ...(parsedIsActive !== undefined ? { isActive: parsedIsActive } : {}),
-      ...(parsedIsPackage !== undefined ? { isPackage: parsedIsPackage } : {}),
+    const baseFilters = {
+      ...(pricingType && { pricingType }),
+      ...(parsedIsActive !== undefined && { isActive: parsedIsActive }),
+      ...(parsedIsPackage !== undefined && { isPackage: parsedIsPackage }),
     };
+
+    // 🚀 OPTIMIZED STRATEGY:
+    // If target specified → no OR
+    let where;
+
+    if (spaceId) {
+      where = {
+        spaceId,
+        ...baseFilters,
+        space: { branchId },
+      };
+    } else if (deviceId) {
+      where = {
+        deviceId,
+        ...baseFilters,
+        device: { branchId },
+      };
+    } else if (toolId) {
+      where = {
+        toolId,
+        ...baseFilters,
+        tool: { branchId },
+      };
+    } else {
+      // Only use OR if absolutely needed
+      where = {
+        OR: [
+          { space: { branchId } },
+          { device: { branchId } },
+          { tool: { branchId } },
+        ],
+        ...baseFilters,
+      };
+    }
 
     const [pricingRules, total] = await prisma.$transaction([
       prisma.pricingRule.findMany({
+        where,
         skip,
         take: limit,
         orderBy: { [sort]: order },
-        where,
       }),
       prisma.pricingRule.count({ where }),
     ]);
 
-    const totalPages = Math.ceil(total / limit);
     res.status(200).json({
       status: "success",
       data: pricingRules,
@@ -289,7 +397,7 @@ export const getAllPricingRules = async (req, res, next) => {
         total,
         page,
         limit,
-        totalPages,
+        totalPages: Math.ceil(total / limit),
       },
       source: "database",
     });
@@ -327,6 +435,11 @@ export const updatePricingRuleById = async (req, res, next) => {
     if (!validUpdates || validUpdates.length === 0) {
       return next(new AppError("No valid fields to update", 400));
     }
+
+    const sanitizedUpdates = {};
+    validUpdates.forEach((field) => {
+      sanitizedUpdates[field] = updates[field];
+    });
 
     const existingRule = await prisma.pricingRule.findUnique({
       where: { id: pricingRuleId },
@@ -397,6 +510,107 @@ export const updatePricingRuleById = async (req, res, next) => {
   }
 };
 
+export const updatePricingByTarget = async (req, res, next) => {
+  try {
+    const { branchId, target, targetId } = req.params;
+    if (!branchId) return next(new AppError("Branch ID is required", 400));
+    if (!target || !targetId) {
+      return next(new AppError("Target and target ID are required", 400));
+    }
+
+    if (!TargetModels.includes(target)) {
+      return next(new AppError("Invalid target type", 400));
+    }
+
+    const targetField = `${target}Id`;
+    const targetFilter = { [targetField]: targetId };
+
+    const targetExists = await prisma[target].findFirst({
+      where: {
+        id: targetId,
+        branchId,
+        ...(target === "tool" ? { deletedAt: null } : { isActive: true }),
+      },
+      select: { id: true },
+    });
+    if (!targetExists) {
+      return next(new AppError("Target not found or not accessible", 404));
+    }
+
+    const allowedUpdates = [
+      "name",
+      "pricingType",
+      "minDurationMinutes",
+      "maxDurationMinutes",
+      "minPlayers",
+      "maxPlayers",
+      "price",
+      "currency",
+      "isActive",
+      "isPackage",
+    ];
+    const updates = { ...req.body };
+    const validUpdates = Object.keys(updates).filter((update) =>
+      allowedUpdates.includes(update),
+    );
+    if (!validUpdates || validUpdates.length === 0) {
+      return next(new AppError("No valid fields to update", 400));
+    }
+
+    const sanitizedUpdates = {};
+    validUpdates.forEach((field) => {
+      sanitizedUpdates[field] = updates[field];
+    });
+
+    if (
+      sanitizedUpdates.pricingType &&
+      !PricingType.includes(sanitizedUpdates.pricingType)
+    ) {
+      return next(new AppError("Invalid pricingType", 400));
+    }
+
+    if (sanitizedUpdates.price !== undefined) {
+      sanitizedUpdates.price = validatePrice(sanitizedUpdates.price);
+    }
+
+    if (sanitizedUpdates.isActive !== undefined) {
+      sanitizedUpdates.isActive = Boolean(sanitizedUpdates.isActive);
+    }
+    if (sanitizedUpdates.isPackage !== undefined) {
+      sanitizedUpdates.isPackage = Boolean(sanitizedUpdates.isPackage);
+    }
+
+    validateRanges({
+      minDurationMinutes: sanitizedUpdates.minDurationMinutes,
+      maxDurationMinutes: sanitizedUpdates.maxDurationMinutes,
+      minPlayers: sanitizedUpdates.minPlayers,
+      maxPlayers: sanitizedUpdates.maxPlayers,
+    });
+
+    const updateResult = await prisma.pricingRule.updateMany({
+      where: targetFilter,
+      data: sanitizedUpdates,
+    });
+
+    if (!updateResult || updateResult.count === 0) {
+      return next(new AppError("No pricing rules found for this target", 404));
+    }
+
+    const updatedRules = await prisma.pricingRule.findMany({
+      where: targetFilter,
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Pricing rules updated successfully",
+      data: updatedRules,
+      meta: { updated: updateResult.count },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const deletePricingRuleById = async (req, res, next) => {
   try {
     const { branchId, pricingRuleId } = req.params;
@@ -432,6 +646,51 @@ export const deletePricingRuleById = async (req, res, next) => {
     res.status(200).json({
       status: "success",
       message: "Pricing rule deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deletePricingRuleByTarget = async (req, res, next) => {
+  try {
+    const { branchId, target, targetId } = req.params;
+    if (!branchId) return next(new AppError("Branch ID is required", 400));
+    if (!target || !targetId) {
+      return next(new AppError("Target and target ID are required", 400));
+    }
+
+    if (!TargetModels.includes(target)) {
+      return next(new AppError("Invalid target type", 400));
+    }
+
+    const targetField = `${target}Id`;
+    const targetFilter = { [targetField]: targetId };
+
+    const targetExists = await prisma[target].findFirst({
+      where: {
+        id: targetId,
+        branchId,
+        ...(target === "tool" ? { deletedAt: null } : { isActive: true }),
+      },
+      select: { id: true },
+    });
+    if (!targetExists) {
+      return next(new AppError("Target not found or not accessible", 404));
+    }
+
+    const deleteResult = await prisma.pricingRule.deleteMany({
+      where: targetFilter,
+    });
+
+    if (!deleteResult || deleteResult.count === 0) {
+      return next(new AppError("No pricing rules found for this target", 404));
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Pricing rules deleted successfully",
+      meta: { deleted: deleteResult.count },
     });
   } catch (error) {
     next(error);

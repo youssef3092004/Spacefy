@@ -73,7 +73,7 @@ router.get(
 );
 
 router.get(
-  "/business/:businessId",
+  "/getByBusinessId/:businessId",
   verifyToken,
   checkPermission("VIEW-BRANCHES"),
   cacheMiddleware(

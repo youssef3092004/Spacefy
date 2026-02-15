@@ -1,5 +1,5 @@
 import validator from "validator";
-
+import { AppError } from "./appError.js";
 export function isValidName(name) {
   return (
     typeof name === "string" && validator.isLength(name, { min: 5, max: 30 })
@@ -26,3 +26,17 @@ export function isValidPassword(password) {
 export function isValidPhone(phone) {
   return typeof phone === "string" && validator.isMobilePhone(phone, "any");
 }
+
+export const validatePrice = (price) => {
+  if (price === undefined || price === null) {
+    throw new AppError("Price is required", 400);
+  }
+  const numericPrice = Number(price);
+  if (Number.isNaN(numericPrice) || !Number.isFinite(numericPrice)) {
+    throw new AppError("Price must be a valid number", 400);
+  }
+  if (numericPrice < 0) {
+    throw new AppError("Price must be >= 0", 400);
+  }
+  return numericPrice;
+};

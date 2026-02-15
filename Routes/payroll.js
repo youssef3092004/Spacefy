@@ -4,12 +4,11 @@ import {
   getPayrollById,
   getPayrollByStaffId,
   getPayrolls,
-  getAllPayrollsByStatus,
-  getAllPayrollsByMonth,
-  getAllPayrollsByYear,
   changeStatusToPaidPayroll,
   changeStatusPayroll,
   deleteAllPayrolls,
+  deleteAllPayrollsByBranchId,
+  deletePayrollById,
 } from "../controllers/payroll.js";
 import { verifyToken } from "../middleware/auth.js";
 import { cacheMiddleware } from "../middleware/cache.js";
@@ -25,9 +24,10 @@ router.post(
   createPayroll,
 );
 router.get(
-  "/getAll",
+  "/getAll/:branchId",
   verifyToken,
-  checkPermission("VIEW-PAYROLLS"),
+  checkPermission("VIEW-PAYROLLS", true),
+  checkOwnership({ model: "payroll", paramId: "branchId", scope: "branch" }),
   cacheMiddleware(
     (req) =>
       `payrolls:page=${req.query.page || 1}:limit=${req.query.limit || 10}:staffProfileId=${
@@ -40,56 +40,52 @@ router.get(
   getPayrolls,
 );
 router.get(
-  "/getById/:payrollId",
+  "/getById/:branchId/:payrollId",
   verifyToken,
+  checkPermission("VIEW-PAYROLLS", true),
+  checkOwnership({ model: "payroll", paramId: "payrollId", scope: "branch" }),
   cacheMiddleware((req) => `payroll:${req.params.payrollId}`, "TTL_BY_ID"),
-  checkPermission("VIEW-PAYROLLS"),
-  checkOwnership({ model: "payroll", paramId: "payrollId", scope: "payroll" }),
   getPayrollById,
 );
 router.get(
-  "/getByStaffId/:staffId",
+  "/getByStaffId/:branchId/:staffId",
   verifyToken,
+  checkPermission("VIEW-PAYROLLS", true),
+  checkOwnership({ model: "payroll", paramId: "staffId", scope: "branch" }),
   cacheMiddleware(
-    (req) => `payrolls:staffId=${req.params.staffId}`,
+    (req) =>
+      `payrolls:staffId=${req.params.staffId}:branchId=${req.params.branchId}`,
     "TTL_BY_ID",
   ),
-  checkPermission("VIEW-PAYROLLS"),
-  checkOwnership({ model: "payroll", paramId: "staffId", scope: "payroll" }),
   getPayrollByStaffId,
 );
-router.get(
-  "/getByStatus/:status",
-  verifyToken,
-  cacheMiddleware((req) => `payrolls:status=${req.params.status}`, "TTL_LIST"),
-  checkPermission("VIEW-PAYROLLS"),
-  getAllPayrollsByStatus,
-);
-router.get(
-  "/getByMonth/:month",
-  verifyToken,
-  checkPermission("VIEW-PAYROLLS"),
-  cacheMiddleware((req) => `payrolls:month=${req.params.month}`, "TTL_LIST"),
-  getAllPayrollsByMonth,
-);
-router.get(
-  "/getByYear/:year",
-  verifyToken,
-  checkPermission("VIEW-PAYROLLS"),
-  cacheMiddleware((req) => `payrolls:year=${req.params.year}`, "TTL_LIST"),
-  getAllPayrollsByYear,
-);
 router.patch(
-  "/changeStatusToPaid/:payrollId",
+  "/changeStatusToPaid/:branchId/:payrollId",
   verifyToken,
-  checkPermission("UPDATE-PAYROLLS"),
+  checkPermission("UPDATE-PAYROLLS", true),
+  checkOwnership({ model: "payroll", paramId: "payrollId", scope: "branch" }),
   changeStatusToPaidPayroll,
 );
 router.patch(
-  "/changeStatus/:payrollId",
+  "/changeStatus/:branchId/:payrollId",
   verifyToken,
-  checkPermission("UPDATE-PAYROLLS"),
+  checkPermission("UPDATE-PAYROLLS", true),
+  checkOwnership({ model: "payroll", paramId: "payrollId", scope: "branch" }),
   changeStatusPayroll,
+);
+router.delete(
+  "/delete/:branchId/:payrollId",
+  verifyToken,
+  checkPermission("DELETE-PAYROLLS", true),
+  checkOwnership({ model: "payroll", paramId: "payrollId", scope: "branch" }),
+  deletePayrollById,
+);
+router.delete(
+  "/deleteAllByBranchId/:branchId",
+  verifyToken,
+  checkPermission("DELETE-PAYROLLS", true),
+  checkOwnership({ model: "payroll", paramId: "branchId", scope: "branch" }),
+  deleteAllPayrollsByBranchId,
 );
 router.delete(
   "/deleteAll",

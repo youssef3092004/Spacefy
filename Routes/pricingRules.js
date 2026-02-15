@@ -2,9 +2,12 @@ import { Router } from "express";
 import {
   createPricingRule,
   getPricingRuleById,
+  getPriceingRulesByTarget,
   getAllPricingRules,
   updatePricingRuleById,
+  updatePricingByTarget,
   deletePricingRuleById,
+  deletePricingRuleByTarget,
 } from "../controllers/pricingRules.js";
 import { verifyToken } from "../middleware/auth.js";
 import { cacheMiddleware } from "../middleware/cache.js";
@@ -33,7 +36,18 @@ router.get(
   ),
   getAllPricingRules,
 );
-
+router.get(
+  "/getByTarget/:branchId/:target/:targetId",
+  verifyToken,
+  checkPermission("VIEW-PRICING-RULES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
+  cacheMiddleware(
+    (req) =>
+      `pricingRules:${req.params.branchId}:target=${req.query.target}:${req.query.targetId}`,
+    "TTL_LIST",
+  ),
+  getPriceingRulesByTarget,
+);
 router.get(
   "/getById/:branchId/:pricingRuleId",
   verifyToken,
@@ -54,12 +68,28 @@ router.patch(
   updatePricingRuleById,
 );
 
+router.patch(
+  "/updateByTarget/:branchId/:target/:targetId",
+  verifyToken,
+  checkPermission("UPDATE-PRICING-RULES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
+  updatePricingByTarget,
+);
+
 router.delete(
   "/delete/:branchId/:pricingRuleId",
   verifyToken,
   checkPermission("DELETE-PRICING-RULES", true),
   checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
   deletePricingRuleById,
+);
+
+router.delete(
+  "/deleteByTarget/:branchId/:target/:targetId",
+  verifyToken,
+  checkPermission("DELETE-PRICING-RULES", true),
+  checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
+  deletePricingRuleByTarget,
 );
 
 export default router;

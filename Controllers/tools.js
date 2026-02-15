@@ -2,15 +2,58 @@
 import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
 import { compressAndUpload } from "../utils/cloudinary.js";
+import { messages } from "../locales/message.js";
+
+const ToolType = [
+  "CONTROLLER",
+  "HEADSET",
+  "STEERING_WHEEL",
+  "PEDALS",
+  "PING_PONG",
+  "BILLIARDO",
+  "BOARD_GAME",
+  "OTHER",
+];
+
+const fixType = (type) => {
+  if (!ToolType.includes(String(type).toUpperCase())) {
+    throw new AppError("Invalid tool type", 400);
+  }
+  return (type = String(type).toUpperCase());
+};
 
 export const createTool = async (req, res, next) => {
   try {
-    const { branchId, name, pricePerSession, isActive } = req.body;
+    const {
+      branchId,
+      spaceId,
+      name,
+      type,
+      pricePerSession,
+      customTypeLabel,
+      isActive,
+    } = req.body;
 
-    if (!branchId) return next(new AppError("BranchId is required", 400));
-    if (!name) return next(new AppError("Name is required", 400));
-    if (pricePerSession === undefined)
-      return next(new AppError("Price per session is required", 400));
+    const requiredFields = { branchId, spaceId, name, type, pricePerSession };
+
+    for (let i in requiredFields) {
+      if (!requiredFields[i]) {
+        return next(
+          new AppError(
+            `${i.charAt(0).toUpperCase() + i.slice(1)} is required`,
+            400,
+          ),
+        );
+      }
+    }
+
+    const fixedType = fixType(type);
+
+    if (fixedType === "OTHER" && !customTypeLabel) {
+      return next(
+        new AppError("Custom type label is required when type is OTHER", 400),
+      );
+    }
 
     if (isNaN(Number(pricePerSession)) || Number(pricePerSession) < 0) {
       return next(
@@ -18,12 +61,15 @@ export const createTool = async (req, res, next) => {
       );
     }
 
-    const active = isActive !== undefined ? Boolean(isActive) : true;
-
     const branch = await prisma.branch.findFirst({
-      where: { id: branchId, deletedAt: null },
+      where: { id: branchId },
     });
     if (!branch) return next(new AppError("Branch not found", 404));
+
+    const space = await prisma.space.findFirst({
+      where: { id: spaceId, branchId },
+    });
+    if (!space) return next(new AppError("Space not found", 404));
 
     let imageUrl =
       "https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=";
@@ -40,16 +86,21 @@ export const createTool = async (req, res, next) => {
     const newTool = await prisma.tool.create({
       data: {
         branchId,
+        spaceId,
         name,
+        type: fixedType,
+        customTypeLabel,
         pricePerSession: Number(pricePerSession),
-        isActive: active,
+        isActive: isActive !== undefined ? Boolean(isActive) : true,
         image: imageUrl,
         createdBy: req.user.id,
+        updatedBy: req.user.id,
       },
     });
 
     res.status(201).json({
-      status: "success",
+      success: true,
+      message: "Tool created successfully",
       data: newTool,
     });
   } catch (error) {
@@ -67,6 +118,14 @@ export const getToolById = async (req, res, next) => {
       return next(new AppError("Tool ID is required", 400));
     }
 
+    const branch = await prisma.branch.findFirst({
+      where: { id: branchId },
+    });
+
+    if (!branch || branch.length === 0) {
+      return next(new AppError("Branch not found", 404));
+    }
+
     const tool = await prisma.tool.findFirst({
       where: { id: toolId, branchId, deletedAt: null },
     });
@@ -79,7 +138,8 @@ export const getToolById = async (req, res, next) => {
       );
     }
     res.status(200).json({
-      status: "success",
+      success: true,
+      message: "Tool retrieved successfully",
       data: tool,
       source: "database",
     });
@@ -94,6 +154,14 @@ export const getToolsByBranchId = async (req, res, next) => {
     if (!branchId) {
       return next(new AppError("Branch ID is required", 400));
     }
+
+    const branch = await prisma.branch.findFirst({
+      where: { id: branchId },
+    });
+
+    if (!branch || branch.length === 0) {
+      return next(new AppError("Branch not found", 404));
+    }
     const tools = await prisma.tool.findMany({
       where: { branchId, deletedAt: null },
     });
@@ -101,7 +169,8 @@ export const getToolsByBranchId = async (req, res, next) => {
       return next(new AppError("No tools found for this branch", 404));
     }
     res.status(200).json({
-      status: "success",
+      success: true,
+      message: "Tools retrieved successfully",
       data: tools,
       source: "database",
     });
@@ -119,10 +188,17 @@ export const getToolsByIsActive = async (req, res, next) => {
     if (isActive === undefined) {
       return next(new AppError("isActive parameter is required", 400));
     }
-    if (isActive !== true && isActive !== false) {
+    if (isActive !== "true" && isActive !== "false") {
       return next(new AppError("isActive must be true or false", 400));
     }
-    const isActiveBool = isActive === true;
+    const isActiveBool = isActive === "true";
+    const branch = await prisma.branch.findFirst({
+      where: { id: branchId },
+    });
+
+    if (!branch || branch.length === 0) {
+      return next(new AppError("Branch not found", 404));
+    }
     const tools = await prisma.tool.findMany({
       where: { branchId, isActive: isActiveBool, deletedAt: null },
     });
@@ -132,7 +208,8 @@ export const getToolsByIsActive = async (req, res, next) => {
       );
     }
     res.status(200).json({
-      status: "success",
+      success: true,
+      message: "Tools retrieved successfully",
       data: tools,
       source: "database",
     });
@@ -150,6 +227,13 @@ export const deleteToolById = async (req, res, next) => {
     if (!toolId) {
       return next(new AppError("Tool ID is required", 400));
     }
+    const branch = await prisma.branch.findFirst({
+      where: { id: branchId },
+    });
+
+    if (!branch || branch.length === 0) {
+      return next(new AppError("Branch not found", 404));
+    }
     const tool = await prisma.tool.findFirst({
       where: { id: toolId, branchId, deletedAt: null },
     });
@@ -166,7 +250,7 @@ export const deleteToolById = async (req, res, next) => {
       data: { deletedAt: new Date() },
     });
     res.status(200).json({
-      status: "success",
+      success: true,
       message: "Tool deleted successfully",
     });
   } catch (error) {
@@ -196,7 +280,7 @@ export const deleteToolsByBranchId = async (req, res, next) => {
       data: { deletedAt: new Date() },
     });
     res.status(200).json({
-      status: "success",
+      success: true,
       message: "Tools deleted successfully",
     });
   } catch (error) {
@@ -207,63 +291,129 @@ export const deleteToolsByBranchId = async (req, res, next) => {
 export const deleteAllTools = async (req, res, next) => {
   try {
     if (req.user.roleName !== "DEVELOPER") {
-      await prisma.tool.updateMany({
-        where: { deletedAt: null },
-        data: { deletedAt: new Date() },
-      });
-      res.status(200).json({
-        status: "success",
-        message: "All tools deleted successfully",
-      });
+      return next(new AppError(messages.FORBIDDEN.en, 403));
     }
+    const result = await prisma.tool.updateMany({
+      where: { deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+
+    if (!result || result.length === 0) {
+      return next(new AppError(messages.DATA_NOT_FOUND.en, 403));
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "All tools deleted successfully",
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// export const updateTooleById = async (req, res, next) => {
-//   try {
-//     const { branchId, toolId } = req.params;
-//     const allowedUpdates = ["name", "pricePerSession", "isActive"];
-//     const updates = Object.keys(req.body);
-//     const isValidOperation = updates.every((update) =>
-//       allowedUpdates.includes(update),
-//     );
-//     if (!isValidOperation) {
-//       return next(
-//         new AppError(
-//           `Invalid updates! Allowed fields: ${allowedUpdates.join(", ")}`,
-//           400,
-//         ),
-//       );
-//     }
-//     if (!branchId) {
-//       return next(new AppError("Branch ID is required", 400));
-//     }
-//     if (!toolId) {
-//       return next(new AppError("Tool ID is required", 400));
-//     }
-//     const tool = await prisma.tool.findFirst({
-//       where: { id: toolId, branchId, deletedAt: null },
-//     });
-//     if (!tool || tool.length === 0)
-//       return next(new AppError("Tool not found", 404));
+export const updateToolById = async (req, res, next) => {
+  try {
+    const { branchId, toolId } = req.params;
+    const allowedUpdates = [
+      "branchId",
+      "spaceId",
+      "name",
+      "type",
+      "pricePerSession",
+      "customTypeLabel",
+      "isActive",
+    ];
+    const updates = { ...req.body };
+    const isValidOperation = Object.keys(updates).every((update) =>
+      allowedUpdates.includes(update),
+    );
+    if (!isValidOperation) {
+      return next(
+        new AppError(
+          `Invalid updates! Allowed fields: ${allowedUpdates.join(", ")}`,
+          400,
+        ),
+      );
+    }
+    if (!branchId) {
+      return next(new AppError("Branch ID is required", 400));
+    }
+    if (!toolId) {
+      return next(new AppError("Tool ID is required", 400));
+    }
+    const branch = await prisma.branch.findFirst({
+      where: { id: branchId },
+    });
+    if (!branch || branch.length === 0) {
+      return next(new AppError("Branch not found", 404));
+    }
+    const tool = await prisma.tool.findFirst({
+      where: { id: toolId, branchId, deletedAt: null },
+    });
+    if (!tool || tool.length === 0)
+      return next(new AppError("Tool not found", 404));
 
-//     if (tool.branchId !== branchId) {
-//       return next(
-//         new AppError("Tool does not belong to the specified branch", 400),
-//       );
-//     }
-//     const updatedData = {};
-//     if (req.body.name !== undefined) updatedData.name = req.body.name;
-//     if (req.body.pricePerSession !== undefined) {
-//       if (isNaN(Number(req.body.pricePerSession)) || Number(req.body.pricePerSession) < 0) {
-//         return next(
-//           new AppError("Price per session must be a positive number", 400),
-//         );
-//       }
+    if (tool.branchId !== branchId) {
+      return next(
+        new AppError("Tool does not belong to the specified branch", 400),
+      );
+    }
+    if (updates.type) {
+      if (
+        String(updates.type).toUpperCase() === "OTHER" &&
+        !ToolType.includes(String(updates.type).toUpperCase()) &&
+        updates.type.toUpperCase() === "OTHER" &&
+        !updates.customTypeLabel
+      ) {
+        return next(
+          new AppError("Custom type label is required when type is OTHER", 400),
+        );
+      }
+      updates.type = fixType(updates.type);
+    }
+    if (updates.pricePerSession) {
+      if (
+        isNaN(Number(updates.pricePerSession)) ||
+        Number(updates.pricePerSession) < 0
+      ) {
+        return next(
+          new AppError("Price per session must be a positive number", 400),
+        );
+      }
+    }
+    let imageUrl =
+      "https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=";
 
-//   } catch (error) {
-//     next(error);
-//   }
-// };
+    if (req.file) {
+      try {
+        const uploadResult = await compressAndUpload(req.file.buffer, "tools");
+        imageUrl = uploadResult.secure_url;
+      } catch (error) {
+        return next(new AppError("Failed to upload image", 500));
+      }
+    }
+
+    if (updates.image) {
+      updates.image = imageUrl;
+    }
+
+    if (updates.isActive) {
+      if (updates.isActive !== "true" && updates.isActive !== "false") {
+        return next(new AppError("isActive must be true or false", 400));
+      }
+      updates.isActive = updates.isActive === "true";
+    }
+
+    const updatedTool = await prisma.tool.update({
+      where: { id: toolId },
+      data: { ...updates, updatedBy: req.user.id },
+    });
+    res.status(200).json({
+      success: true,
+      message: "Tool updated successfully",
+      data: updatedTool,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

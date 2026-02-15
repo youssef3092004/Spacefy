@@ -76,10 +76,32 @@ enum DeviceType {
   OTHER
 }
 
+enum ToolType {
+  CONTROLLER
+  HEADSET
+  STEERING_WHEEL
+  PEDALS
+  PING_PONG
+  BILLIARDO
+  BOARD_GAME
+  OTHER
+}
+
 enum PricingType {
   PER_HOUR
   PER_SESSION
   PER_GAME
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum PlanType {
+  FREE
+  PRO
+  ENTERPRISE
 }
 
 // fix it to branch not business
@@ -164,8 +186,8 @@ model Payroll {
   id             String @id @default(uuid())
   staffProfileId String
 
-  grossSalary Decimal // baseSalary + bonus + overtime
-  bonus       Decimal @default(0)
+  grossSalary Decimal @db.Decimal(12, 2) // baseSalary + bonus + overtime
+  bonus       Decimal @db.Decimal(12, 2)
   overtime    Decimal @default(0)
   deductions  Decimal @default(0)
   netSalary   Decimal // grossSalary - deductions
@@ -188,6 +210,8 @@ model Payroll {
   @@unique([staffProfileId, month, year])
   @@index([status])
   @@index([month, year])
+  @@index([approvedById])
+  @@index([staffProfileId])
 }
 
 model Role {
@@ -222,6 +246,9 @@ model RolePermission {
 
   role       Role       @relation(fields: [roleId], references: [id])
   permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@index([roleId])
+  @@index([permissionId])
 }
 
 model UserPermission {
@@ -236,6 +263,9 @@ model UserPermission {
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@unique([userId, permissionId])
+  @@index([isAllowed])
+  @@index([userId])
+  @@index([permissionId])
 }
 
 model Business {
@@ -311,6 +341,7 @@ model Space {
   // @@index([planId])
   devices      Device[]
   pricingRules PricingRule[]
+  tools        Tool[]
 
   @@index([branchId])
 }
@@ -324,7 +355,7 @@ model Device {
   customTypeLabel String?
   image           String      @default("https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=")
   priceType       PricingType @default(PER_HOUR)
-  price           Decimal     @default(0) @db.Decimal(10, 2)
+  price           Decimal     @default(0) @db.Decimal(12, 2)
   isActive        Boolean     @default(true)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -342,12 +373,15 @@ model Device {
 model Tool {
   id       String @id @default(uuid())
   branchId String
+  spaceId  String
   // planId   String
 
   name            String
-  image           String  @default("https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=")
-  pricePerSession Decimal @db.Decimal(10, 2)
-  isActive        Boolean @default(true)
+  type            ToolType
+  customTypeLabel String?
+  image           String   @default("https://media.istockphoto.com/id/1472933890/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=Qw0wGz-a6BpwFjaoxtkjgsf75C-DeOYs7GFPU8O9z20=")
+  pricePerSession Decimal  @db.Decimal(10, 2)
+  isActive        Boolean  @default(true)
 
   /**
    * 🧾 Audit fields
@@ -360,6 +394,7 @@ model Tool {
   updatedAt DateTime @updatedAt
 
   branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  space        Space         @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   // plan         Plan          @relation(fields: [planId], references: [id])
   // pricingRules PricingRule[]
   pricingRules PricingRule[]
@@ -403,5 +438,36 @@ model PricingRule {
   @@index([deviceId])
   @@index([toolId])
   @@index([isActive])
+  @@index([pricingType])
   @@index([isPackage])
+  @@index([spaceId, isActive])
+  @@index([deviceId, isActive])
+  @@index([toolId, isActive])
+}
+
+model Plan {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  type        PlanType
+  description String?
+
+  price           Decimal         @db.Decimal(10, 2)
+  currency        String          @default("EGP")
+  billingInterval BillingInterval @default(MONTHLY)
+  trialDays       Int?
+
+  isActive Boolean @default(true)
+  isPublic Boolean @default(true)
+
+  maxBranches Int?
+  maxSpaces   Int?
+  maxDevices  Int?
+  maxTools    Int?
+  maxUsers    Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([billingInterval])
 }

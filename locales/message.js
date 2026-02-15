@@ -19,6 +19,18 @@ export const messages = {
     en: "Email not found",
     ar: "البريد الإلكتروني غير موجود",
   },
+  DATA_NOT_FOUND: {
+    en: "Data not found",
+    ar: "لا يوجد اي بيانات",
+  },
+  BRANCH_NOT_FOUND: {
+    en: "Branch not found",
+    ar: "الفرع غير موجود",
+  },
+  DATA_DELETED_SUCCESSFULLY: {
+    en: "Data deleted successfully",
+    ar: "تم حذف البيانات بنجاح",
+  },
   WEAK_PASSWORD: {
     en: "Password is too weak",
     ar: "كلمة المرور ضعيفة جدًا",

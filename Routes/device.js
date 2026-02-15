@@ -40,7 +40,7 @@ router.get(
   "/getById/:branchId/:deviceId",
   verifyToken,
   checkPermission("VIEW-DEVICES", true),
-  checkOwnership({ model: "device", paramId: "deviceId", scope: "device" }),
+  checkOwnership({ model: "device", paramId: "deviceId", scope: "branch" }),
   cacheMiddleware((req) => `device:${req.params.deviceId}`, "TTL_BY_ID"),
   getDeviceById,
 );
@@ -70,14 +70,14 @@ router.patch(
   "/update/:branchId/:deviceId",
   verifyToken,
   checkPermission("UPDATE-DEVICES", true),
-  checkOwnership({ model: "device", paramId: "deviceId", scope: "device" }),
+  checkOwnership({ model: "device", paramId: "deviceId", scope: "branch" }),
   updateDeviceById,
 );
 router.delete(
   "/delete/:branchId/:deviceId",
   verifyToken,
   checkPermission("DELETE-DEVICES", true),
-  checkOwnership({ model: "device", paramId: "deviceId", scope: "device" }),
+  checkOwnership({ model: "device", paramId: "deviceId", scope: "branch" }),
   deleteDeviceById,
 );
 router.delete(

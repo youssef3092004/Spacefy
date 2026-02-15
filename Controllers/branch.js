@@ -133,7 +133,7 @@ export const getBranchesByBusinessId = async (req, res, next) => {
         where: { businessId },
       }),
     ]);
-    if (!branches.length) {
+    if (!branches || branches.length === 0) {
       return next(new AppError("No branches found for this business", 404));
     }
     res.status(200).json({

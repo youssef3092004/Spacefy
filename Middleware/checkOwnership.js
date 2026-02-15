@@ -18,6 +18,7 @@ export const checkOwnership = ({
       const resourceId = req.params[paramId];
 
       if (!resourceId) {
+        console.log("Missing resource ID in params:", req.params);
         return next(new AppError(`${paramId} is required`, 400));
       }
 

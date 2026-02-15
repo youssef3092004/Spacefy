@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
   createSpace,
   getSpaceById,
-  getAllSpaces,
+  getAllByBranchId,
   getSpaceByIsActive,
   getSpacesByType,
   updateSpaceById,
@@ -26,7 +26,7 @@ router.post(
   createSpace,
 );
 router.get(
-  "/getAll/:branchId",
+  "/getAllByBranchId/:branchId",
   verifyToken,
   checkPermission("VIEW-SPACES", true),
   checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
@@ -39,7 +39,7 @@ router.get(
       }`,
     "TTL_LIST",
   ),
-  getAllSpaces,
+  getAllByBranchId,
 );
 router.get(
   "/getById/:branchId/:spaceId",
