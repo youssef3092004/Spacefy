@@ -24,6 +24,14 @@ router.post(
   createDevice,
 );
 router.get(
+  "/getById/:branchId/:deviceId",
+  verifyToken,
+  checkPermission("VIEW-DEVICES", true),
+  checkOwnership({ model: "device", paramId: "deviceId", scope: "branch" }),
+  cacheMiddleware((req) => `device:${req.params.deviceId}`, "TTL_BY_ID"),
+  getDeviceById,
+);
+router.get(
   "/getAll",
   verifyToken,
   checkPermission("VIEW-DEVICES"),
@@ -35,14 +43,6 @@ router.get(
     "TTL_LIST",
   ),
   getAllDevices,
-);
-router.get(
-  "/getById/:branchId/:deviceId",
-  verifyToken,
-  checkPermission("VIEW-DEVICES", true),
-  checkOwnership({ model: "device", paramId: "deviceId", scope: "branch" }),
-  cacheMiddleware((req) => `device:${req.params.deviceId}`, "TTL_BY_ID"),
-  getDeviceById,
 );
 router.get(
   "/getByType/:branchId/:type",
@@ -60,10 +60,16 @@ router.get(
   verifyToken,
   checkPermission("VIEW-DEVICES", true),
   checkOwnership({ model: "branch", paramId: "branchId", scope: "branch" }),
-  cacheMiddleware(
-    (req) => `devices:branchId=${req.params.branchId}`,
-    "TTL_LIST",
-  ),
+  cacheMiddleware((req) => {
+    const {
+      page = 1,
+      limit = 10,
+      sort = "createdAt",
+      order = "desc",
+    } = req.query;
+
+    return `devices:branchId=${req.params.branchId}:page=${page}:limit=${limit}:sort=${sort}:order=${order}`;
+  }, "TTL_LIST"),
   getAllByBranchId,
 );
 router.patch(

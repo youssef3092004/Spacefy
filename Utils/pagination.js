@@ -21,7 +21,5 @@ export const pagination = (req) => {
   const sort = req.query.sort || "createdAt";
   const order = (req.query.order || "desc").toLowerCase();
 
-  const cacheKey = `page=${page}:limit=${limit}:sort=${sort}:order=${order}`;
-
-  return { page, limit, skip, sort, order, cacheKey };
+  return { page, limit, skip, sort, order };
 };

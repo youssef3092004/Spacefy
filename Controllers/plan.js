@@ -1,6 +1,5 @@
 import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
-import { pagination } from "../utils/pagination.js";
 import { validatePrice } from "../utils/validation.js";
 
 const PlanTypes = ["FREE", "PRO", "ENTERPRISE"];
@@ -25,6 +24,7 @@ export const createPlan = async (req, res, next) => {
       trialDays,
       isActive,
       isPublic,
+      maxStaff,
       maxBranches,
       maxSpaces,
       maxDevices,
@@ -32,7 +32,17 @@ export const createPlan = async (req, res, next) => {
       maxUsers,
     } = req.body;
 
-    const requiredFields = { name, type, price };
+    const requiredFields = {
+      name,
+      type,
+      price,
+      maxStaff,
+      maxBranches,
+      maxSpaces,
+      maxDevices,
+      maxTools,
+      maxUsers,
+    };
     for (const field in requiredFields) {
       if (!requiredFields[field]) {
         return next(
@@ -44,9 +54,13 @@ export const createPlan = async (req, res, next) => {
       }
     }
 
-    if (!PlanTypes.includes(type)) {
-      return next(new AppError("Invalid plan type", 400));
+    const existingPlan = await prisma.plan.findFirst({
+      where: { name },
+    });
+    if (existingPlan) {
+      return next(new AppError("Plan with this name already exists", 400));
     }
+    const fixedType = fixType(type);
 
     const numericPrice = validatePrice(price);
 
@@ -66,7 +80,7 @@ export const createPlan = async (req, res, next) => {
     const newPlan = await prisma.plan.create({
       data: {
         name,
-        type,
+        type: fixedType,
         description,
         price: numericPrice,
         currency: currency || "EGP",
@@ -74,6 +88,7 @@ export const createPlan = async (req, res, next) => {
         trialDays,
         isActive: isActive !== undefined ? Boolean(isActive) : true,
         isPublic: isPublic !== undefined ? Boolean(isPublic) : true,
+        maxStaff,
         maxBranches,
         maxSpaces,
         maxDevices,
@@ -113,60 +128,47 @@ export const getPlanById = async (req, res, next) => {
   }
 };
 
-export const getAllPlans = async (req, res, next) => {
+export const getPlanByBussinessId = async (req, res, next) => {
   try {
-    const { page, limit, skip, order, sort } = pagination(req);
-    const { type, isActive, isPublic, billingInterval } = req.query;
+    const { businessId } = req.params;
+    if (!businessId) return next(new AppError("Business ID is required", 400));
 
-    const parseBoolean = (value, field) => {
-      if (value === undefined) return undefined;
-      if (value === "true") return true;
-      if (value === "false") return false;
-      throw new AppError(`${field} must be true or false`, 400);
-    };
+    const business = await prisma.business.findFirst({
+      where: { id: businessId },
+    });
 
-    const parsedIsActive = parseBoolean(isActive, "isActive");
-    const parsedIsPublic = parseBoolean(isPublic, "isPublic");
+    if (!business)
+      return next(new AppError("Plan not found for this business", 404));
 
-    if (type && !PlanTypes.includes(type)) {
-      return next(new AppError("Invalid plan type", 400));
-    }
+    const plan = await prisma.plan.findFirst({
+      where: { id: business.planId },
+    });
 
-    if (billingInterval && !BillingIntervals.includes(billingInterval)) {
-      return next(new AppError("Invalid billing interval", 400));
-    }
-
-    const allowedSortFields = ["createdAt", "price", "name"];
-    if (!allowedSortFields.includes(sort)) {
-      return next(new AppError("Invalid sort field", 400));
-    }
-
-    const where = {
-      ...(type && { type }),
-      ...(parsedIsActive !== undefined && { isActive: parsedIsActive }),
-      ...(parsedIsPublic !== undefined && { isPublic: parsedIsPublic }),
-      ...(billingInterval && { billingInterval }),
-    };
-
-    const [plans, total] = await prisma.$transaction([
-      prisma.plan.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { [sort]: order },
-      }),
-      prisma.plan.count({ where }),
-    ]);
+    if (!plan)
+      return next(new AppError("Plan not found for this business", 404));
 
     res.status(200).json({
       status: "success",
+      data: plan,
+      source: "database",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAllPlans = async (req, res, next) => {
+  try {
+    const plans = await prisma.plan.findMany({});
+    if (!plans || plans.length === 0) {
+      return next(new AppError("No plans found", 404));
+    }
+
+    const total = plans.length;
+    res.status(200).json({
+      status: "success",
       data: plans,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
+      total,
       source: "database",
     });
   } catch (error) {
@@ -189,6 +191,7 @@ export const updatePlanById = async (req, res, next) => {
       "trialDays",
       "isActive",
       "isPublic",
+      "maxStaff",
       "maxBranches",
       "maxSpaces",
       "maxDevices",
@@ -213,9 +216,10 @@ export const updatePlanById = async (req, res, next) => {
     const existingPlan = await prisma.plan.findUnique({ where: { id } });
     if (!existingPlan) return next(new AppError("Plan not found", 404));
 
-    if (sanitizedUpdates.type && !PlanTypes.includes(sanitizedUpdates.type)) {
-      return next(new AppError("Invalid plan type", 400));
-    }
+    const fixedType = sanitizedUpdates.type
+      ? fixType(sanitizedUpdates.type)
+      : existingPlan.type;
+    sanitizedUpdates.type = fixedType;
 
     if (
       sanitizedUpdates.billingInterval &&
@@ -275,6 +279,47 @@ export const deletePlanById = async (req, res, next) => {
     res.status(200).json({
       status: "success",
       message: "Plan deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAllPublicPlans = async (req, res, next) => {
+  try {
+    const plans = await prisma.plan.findMany({
+      where: { isPublic: true },
+    });
+    if (!plans || plans.length === 0) {
+      return next(new AppError("No public plans found", 404));
+    }
+    const total = plans.length;
+
+    res.status(200).json({
+      status: "success",
+      data: plans,
+      total,
+      source: "database",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAllPrivatePlans = async (req, res, next) => {
+  try {
+    const plans = await prisma.plan.findMany({
+      where: { isPublic: false },
+    });
+    if (!plans || plans.length === 0) {
+      return next(new AppError("No private plans found", 404));
+    }
+    const total = plans.length;
+    res.status(200).json({
+      status: "success",
+      data: plans,
+      total,
+      source: "database",
     });
   } catch (error) {
     next(error);

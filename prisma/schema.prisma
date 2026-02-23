@@ -272,20 +272,22 @@ model Business {
   id        String   @id @default(uuid())
   name      String
   ownerId   String
+  planId    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   owner            User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  plan             Plan              @relation(fields: [planId], references: [id])
   // subscriptions Subscription[]
   branches         Branch[]
   businessSettings BusinessSettings?
+  storageUsage     StorageUsage?
 
   @@index([ownerId])
 }
 
-model Branch {
+model Branch {npx prisma migrate reset
   id          String    @id @default(uuid())
-  // planId     String
   businessId  String
   name        String
   address     String
@@ -297,14 +299,7 @@ model Branch {
   updatedAt   DateTime  @updatedAt
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  // plan     Plan     @relation(fields: [planId], references: [id])
 
-  // devices       Device[]
-  // tools         Tool[]
-  // visits        Visit[]
-  // staffProfiles StaffProfile[]
-  // revenues      Revenue[]
-  // expenses      Expense[]
   staffProfiles         StaffProfile[]
   spaces                Space[]
   devices               Device[]
@@ -459,15 +454,60 @@ model Plan {
   isActive Boolean @default(true)
   isPublic Boolean @default(true)
 
+  maxStaff    Int?
   maxBranches Int?
   maxSpaces   Int?
   maxDevices  Int?
   maxTools    Int?
   maxUsers    Int?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  businesses Business[]
 
   @@index([isActive])
   @@index([billingInterval])
+}
+
+// 📊 Storage & Resource Usage Tracking
+model StorageUsage {
+  id         String @id @default(uuid())
+  businessId String @unique
+
+  // Current Usage (actual)
+  currentBranches Int @default(0)
+  currentSpaces   Int @default(0)
+  currentDevices  Int @default(0)
+  currentTools    Int @default(0)
+  currentStaff    Int @default(0)
+  currentUsers    Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  history  StorageUsageHistory[]
+
+  @@index([businessId])
+}
+
+// 📈 Historical snapshots for analytics
+model StorageUsageHistory {
+  id             String @id @default(uuid())
+  storageUsageId String
+
+  // Snapshot data
+  branches Int
+  spaces   Int
+  devices  Int
+  tools    Int
+  staff    Int
+  users    Int
+
+  recordedAt DateTime @default(now())
+
+  storageUsage StorageUsage @relation(fields: [storageUsageId], references: [id], onDelete: Cascade)
+
+  @@index([storageUsageId])
+  @@index([recordedAt])
 }

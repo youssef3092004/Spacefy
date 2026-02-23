@@ -7,6 +7,7 @@ import {
   updateUserById,
   getUserByRoleName,
   getMe,
+  getAllUserWithSpecificRoleForBusiness,
 } from "../controllers/user.js";
 import { verifyToken } from "../middleware/auth.js";
 import { cacheMiddleware } from "../middleware/cache.js";
@@ -83,7 +84,24 @@ router.get(
   ),
   getUserByRoleName,
 );
-
 router.get("/getMe", verifyToken, getMe);
+router.get(
+  "/getAllWithSpecificRoleForBusiness/:businessId/:roleName",
+  verifyToken,
+  checkPermission("VIEW-USERS"),
+  checkOwnership({
+    model: "business",
+    paramId: "businessId",
+    scope: "business",
+  }),
+  cacheMiddleware(
+    (req) =>
+      `users:businessId=${req.params.businessId}:roleName=${req.params.roleName}:page=${req.query.page || 1}:limit=${req.query.limit || 10}:sort=${
+        req.query.sort || "createdAt"
+      }:order=${req.query.order || "desc"}`,
+    "TTL_LIST",
+  ),
+  getAllUserWithSpecificRoleForBusiness,
+);
 
 export default router;

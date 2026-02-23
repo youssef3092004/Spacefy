@@ -1,6 +1,11 @@
 import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
 import { pagination } from "../utils/pagination.js";
+import {
+  incrementStorageUsage,
+  decrementStorageUsage,
+} from "../utils/storageUsage.js";
+import { invalidateCacheByPattern } from "../utils/cacheInvalidation.js";
 
 const DeviceType = [
   "PC",
@@ -72,9 +77,10 @@ export const createDevice = async (req, res, next) => {
 
     const existingSpace = await prisma.space.findUnique({
       where: { id: spaceId },
+      include: { branch: { select: { businessId: true } } },
     });
 
-    if (!existingSpace || existingSpace === 0) {
+    if (!existingSpace) {
       return next(new AppError("Space not found", 404));
     }
 
@@ -84,18 +90,40 @@ export const createDevice = async (req, res, next) => {
       );
     }
 
-    const device = await prisma.device.create({
-      data: {
-        branchId,
-        spaceId,
-        type: fixedType,
-        customTypeLabel,
-        priceType: fixPriceType(priceType || "PER_HOUR"),
-        price: price || 0,
-        isActive: isActive !== undefined ? isActive : true,
+    const businessId = existingSpace.branch.businessId;
+
+    const { incrementStorage, newDevice } = await prisma.$transaction(
+      async (tx) => {
+        const newDevice = await tx.device.create({
+          data: {
+            branchId,
+            spaceId,
+            type: fixedType,
+            customTypeLabel,
+            priceType: fixPriceType(priceType || "PER_HOUR"),
+            price: price || 0,
+            isActive: isActive !== undefined ? isActive : true,
+          },
+        });
+
+        const incrementStorage = await incrementStorageUsage(
+          businessId,
+          "devices",
+          tx,
+        );
+
+        return { incrementStorage, newDevice };
       },
+    );
+
+    await invalidateCacheByPattern(`devices:*branchId=${branchId}*`);
+
+    res.status(201).json({
+      status: "success",
+      message: "Device created successfully",
+      data: newDevice,
+      incrementStorage,
     });
-    res.status(201).json({ status: "success", data: device });
   } catch (error) {
     next(error);
   }
@@ -171,7 +199,7 @@ export const getAllByBranchId = async (req, res, next) => {
     const existingBranch = await prisma.branch.findUnique({
       where: { id: branchId },
     });
-    if (!existingBranch || existingBranch === 0) {
+    if (!existingBranch) {
       return next(new AppError("Branch not found", 404));
     }
     const [devices, total] = await prisma.$transaction([
@@ -193,6 +221,7 @@ export const getAllByBranchId = async (req, res, next) => {
         total,
         totalPages,
       },
+      source: "database",
     });
   } catch (error) {
     next(error);
@@ -293,13 +322,20 @@ export const deleteDeviceById = async (req, res, next) => {
     }
     const device = await prisma.device.findUnique({
       where: { id: deviceId },
+      include: { branch: { select: { businessId: true } } },
     });
     if (!device || device === 0) {
       return next(new AppError("Device not found", 404));
     }
-    await prisma.device.delete({
-      where: { id: deviceId },
+
+    await prisma.$transaction(async (tx) => {
+      await tx.device.delete({
+        where: { id: deviceId },
+      });
+
+      await decrementStorageUsage(device.branch.businessId, "devices", tx);
     });
+
     res
       .status(200)
       .json({ status: "success", message: "Device deleted successfully" });

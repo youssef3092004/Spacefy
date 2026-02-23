@@ -17,13 +17,16 @@ export const cacheMiddleware = (keyBuilder, type) => {
       const originalJson = res.json.bind(res);
 
       res.json = (body) => {
-        const ttlEnvKey = `${type}`;
-        const ttl = parseInt(process.env[ttlEnvKey]);
+        // Only cache successful responses
+        if (body.status === "success" || body.success === true) {
+          const ttlEnvKey = `${type}`;
+          const ttl = parseInt(process.env[ttlEnvKey]);
 
-        if (ttl) {
-          redisClient.setEx(key, ttl, JSON.stringify(body));
-        } else {
-          redisClient.set(key, JSON.stringify(body));
+          if (ttl && ttl > 0) {
+            redisClient.setEx(key, ttl, JSON.stringify(body));
+          } else {
+            redisClient.set(key, JSON.stringify(body));
+          }
         }
 
         return originalJson(body);

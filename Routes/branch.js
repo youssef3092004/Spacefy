@@ -24,7 +24,6 @@ router.post(
   upload.single("image"),
   createBranch,
 );
-
 router.put(
   "/update/:branchId",
   verifyToken,
@@ -33,7 +32,6 @@ router.put(
   upload.single("image"),
   updateBranchById,
 );
-
 router.patch(
   "/update/:branchId",
   verifyToken,
@@ -42,7 +40,6 @@ router.patch(
   upload.single("image"),
   updateBranchByIdPatch,
 );
-
 router.delete(
   "/delete/:branchId",
   verifyToken,
@@ -54,13 +51,16 @@ router.get(
   "/getAll",
   verifyToken,
   checkPermission("VIEW-BRANCHES"),
-  cacheMiddleware(
-    (req) =>
-      `branches:page=${req.query.page || 1}:limit=${req.query.limit || 10}:sort=${
-        req.query.sort || "createdAt"
-      }:order=${req.query.order || "desc"}`,
-    "TTL_LIST",
-  ),
+  cacheMiddleware((req) => {
+    const {
+      page = 1,
+      limit = 10,
+      sort = "createdAt",
+      order = "desc",
+    } = req.query;
+
+    return `branches:all:page=${page}:limit=${limit}:sort=${sort}:order=${order}`;
+  }, "TTL_LIST"),
   getAllBranches,
 );
 router.get(
@@ -71,18 +71,27 @@ router.get(
   cacheMiddleware((req) => `branch:${req.params.branchId}`, "TTL_BY_ID"),
   getBranchById,
 );
-
 router.get(
   "/getByBusinessId/:businessId",
   verifyToken,
   checkPermission("VIEW-BRANCHES"),
-  cacheMiddleware(
-    (req) => `branchesBusiness:${req.params.businessId}`,
-    "TTL_BY_ID",
-  ),
+  checkOwnership({
+    model: "business",
+    paramId: "businessId",
+    scope: "business",
+  }),
+  cacheMiddleware((req) => {
+    const {
+      page = 1,
+      limit = 10,
+      sort = "createdAt",
+      order = "desc",
+    } = req.query;
+
+    return `branches:businessId=${req.params.businessId}:page=${page}:limit=${limit}:sort=${sort}:order=${order}`;
+  }, "TTL_LIST"),
   getBranchesByBusinessId,
 );
-
 router.delete(
   "/deleteAll",
   verifyToken,

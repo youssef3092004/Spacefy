@@ -3,6 +3,10 @@ import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
 import { compressAndUpload } from "../utils/cloudinary.js";
 import { messages } from "../locales/message.js";
+import {
+  incrementStorageUsage,
+  decrementStorageUsage,
+} from "../utils/storageUsage.js";
 
 const ToolType = [
   "CONTROLLER",
@@ -83,25 +87,37 @@ export const createTool = async (req, res, next) => {
       }
     }
 
-    const newTool = await prisma.tool.create({
-      data: {
-        branchId,
-        spaceId,
-        name,
-        type: fixedType,
-        customTypeLabel,
-        pricePerSession: Number(pricePerSession),
-        isActive: isActive !== undefined ? Boolean(isActive) : true,
-        image: imageUrl,
-        createdBy: req.user.id,
-        updatedBy: req.user.id,
-      },
+    const [storageUsage, newTool] = await prisma.$transaction(async (tx) => {
+      const storageUsage = await incrementStorageUsage(
+        branch.businessId,
+        "tools",
+        tx,
+      );
+      if (!storageUsage) {
+        throw new AppError("Failed to update storage usage", 500);
+      }
+      const newTool = await tx.tool.create({
+        data: {
+          branchId,
+          spaceId,
+          name,
+          type: fixedType,
+          customTypeLabel,
+          pricePerSession: Number(pricePerSession),
+          isActive: isActive !== undefined ? Boolean(isActive) : true,
+          image: imageUrl,
+          createdBy: req.user.id,
+          updatedBy: req.user.id,
+        },
+      });
+      return [storageUsage, newTool];
     });
 
     res.status(201).json({
       success: true,
       message: "Tool created successfully",
       data: newTool,
+      storageUsage,
     });
   } catch (error) {
     next(error);
@@ -234,24 +250,37 @@ export const deleteToolById = async (req, res, next) => {
     if (!branch || branch.length === 0) {
       return next(new AppError("Branch not found", 404));
     }
-    const tool = await prisma.tool.findFirst({
-      where: { id: toolId, branchId, deletedAt: null },
-    });
-    if (!tool || tool.length === 0)
-      return next(new AppError("Tool not found", 404));
 
-    if (tool.branchId !== branchId) {
-      return next(
-        new AppError("Tool does not belong to the specified branch", 400),
+    const { storageUsage, tool } = await prisma.$transaction(async (tx) => {
+      const tool = await tx.tool.findFirst({
+        where: { id: toolId, branchId, deletedAt: null },
+      });
+
+      if (!tool || tool.length === 0) {
+        throw new AppError("Tool not found", 404);
+      }
+
+      if (tool.branchId !== branchId) {
+        throw new AppError("Tool does not belong to the specified branch", 400);
+      }
+
+      const storageUsage = await decrementStorageUsage(
+        branch.businessId,
+        "tools",
+        tx,
       );
-    }
-    await prisma.tool.update({
-      where: { id: toolId },
-      data: { deletedAt: new Date() },
+
+      const deletedTool = await tx.tool.update({
+        where: { id: toolId },
+        data: { deletedAt: new Date() },
+      });
+
+      return { storageUsage, tool: deletedTool };
     });
     res.status(200).json({
       success: true,
       message: "Tool deleted successfully",
+      storageUsage,
     });
   } catch (error) {
     next(error);
@@ -269,19 +298,43 @@ export const deleteToolsByBranchId = async (req, res, next) => {
     if (!branchId) {
       return next(new AppError("Branch ID is required", 400));
     }
+
+    const branch = await prisma.branch.findFirst({
+      where: { id: branchId },
+    });
+
+    if (!branch || branch.length === 0) {
+      return next(new AppError("Branch not found", 404));
+    }
+
     const tools = await prisma.tool.findMany({
       where: { branchId, deletedAt: null },
     });
     if (!tools || tools.length === 0) {
       return next(new AppError("No tools found for this branch", 404));
     }
-    await prisma.tool.updateMany({
-      where: { branchId, deletedAt: null },
-      data: { deletedAt: new Date() },
+
+    const { storageUsage, result } = await prisma.$transaction(async (tx) => {
+      const result = await tx.tool.updateMany({
+        where: { branchId, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+
+      const storageUsage = await decrementStorageUsage(
+        branch.businessId,
+        "tools",
+        tx,
+        result.count,
+      );
+
+      return { storageUsage, result };
     });
+
     res.status(200).json({
       success: true,
       message: "Tools deleted successfully",
+      count: result.count,
+      storageUsage,
     });
   } catch (error) {
     next(error);

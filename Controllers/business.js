@@ -1,32 +1,50 @@
 import { prisma } from "../configs/db.js";
+import { messages } from "../locales/message.js";
 import { AppError } from "../utils/appError.js";
 import { pagination } from "../utils/pagination.js";
+import { initializeStorageUsage } from "../utils/storageUsage.js";
+import { invalidateCacheByPattern } from "../utils/cacheInvalidation.js";
 
 export const createBusiness = async (req, res, next) => {
   try {
-    const { name, ownerId } = req.body;
+    const { name, ownerId, planId } = req.body;
     if (!name || !ownerId) {
       return next(new AppError("Name and ownerId are required", 400));
+    }
+    const existOwner = await prisma.user.findUnique({
+      where: { id: ownerId },
+    });
+    if (!existOwner) {
+      return next(new AppError("Owner not found", 404));
     }
     const newBusiness = await prisma.business.create({
       data: {
         name,
         ownerId,
+        planId: planId || "07bd0a54-3840-47c2-99b0-615967e1ab83",
       },
     });
+
+    const storageUsage = await initializeStorageUsage(newBusiness.id);
 
     const newSettings = await prisma.businessSettings.create({
       data: {
         businessId: newBusiness.id,
-        defaultLanguage: "EN",
         notificationsEnabled: true,
         autoApprovePayroll: false,
       },
     });
 
+    await invalidateCacheByPattern("businesses*");
+    await invalidateCacheByPattern(`business:${newBusiness.id}`);
+
     return res.status(201).json({
       success: true,
-      data: { business: newBusiness, settings: newSettings },
+      data: {
+        business: newBusiness,
+        settings: newSettings,
+        storage: storageUsage,
+      },
       source: "database",
     });
   } catch (error) {
@@ -42,13 +60,26 @@ export const getBusinessById = async (req, res, next) => {
     }
     const business = await prisma.business.findUnique({
       where: { id },
+      include: {
+        plan: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
     });
     if (!business) {
       return next(new AppError("Business not found", 404));
     }
+    const branchesCount = await prisma.branch.count({
+      where: { businessId: id },
+    });
+    business.branchesCount = branchesCount;
     res.status(200).json({
       success: true,
       data: business,
+      branchesCount,
       source: "database",
     });
   } catch (error) {
@@ -58,12 +89,28 @@ export const getBusinessById = async (req, res, next) => {
 
 export const getAllBusinesses = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(new AppError(messages.FORBIDDEN.en, 403));
+    }
     const { page, limit, skip, sort, order } = pagination(req);
     const [businesses, total] = await prisma.$transaction([
       prisma.business.findMany({
         skip,
         take: limit,
         orderBy: { [sort]: order },
+        include: {
+          plan: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              branches: true,
+            },
+          },
+        },
       }),
       prisma.business.count(),
     ]);
@@ -101,6 +148,10 @@ export const deleteBusinessById = async (req, res, next) => {
     if (!business) {
       return next(new AppError("Business not found", 404));
     }
+
+    await invalidateCacheByPattern("businesses*");
+    await invalidateCacheByPattern(`business:${business.id}`);
+
     res.status(200).json({
       success: true,
       data: business,
@@ -117,6 +168,10 @@ export const deleteAllBusinesses = async (req, res, next) => {
     if (deletedBusinesses.count === 0) {
       return next(new AppError("No businesses to delete", 404));
     }
+
+    await invalidateCacheByPattern("businesses*");
+    await invalidateCacheByPattern(`business:*`);
+
     res.status(200).json({
       success: true,
       data: deletedBusinesses,
@@ -155,8 +210,20 @@ export const updateBusinessById = async (req, res, next) => {
         owner: {
           connect: { id: ownerId },
         },
+        name,
+      },
+      include: {
+        plan: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
+
+    await invalidateCacheByPattern("businesses*");
+    await invalidateCacheByPattern(`business:${updatedBusiness.id}`);
 
     res.status(200).json({
       success: true,

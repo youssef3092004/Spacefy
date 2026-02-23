@@ -59,7 +59,7 @@ router.get(
     (req) => `staffProfilesBranch:${req.params.branchId}`,
     "TTL_BY_ID",
   ),
-  checkPermission("VIEW-STAFF-PROFILES"),
+  checkPermission("VIEW-STAFF-PROFILES", true),
   checkOwnership({
     model: "branch",
     paramId: "branchId",

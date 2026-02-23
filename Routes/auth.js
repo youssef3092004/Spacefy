@@ -27,7 +27,7 @@ router.post(
   checkPermission("REGISTER-STAFF"),
   registerStaff,
 );
-router.post("/registerDeveloper", verifyToken, registerDeveloper);
+router.post("/registerDeveloper", registerDeveloper);
 router.post("/login", login);
 router.post("/logout", verifyToken, logout);
 router.post(

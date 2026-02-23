@@ -47,7 +47,7 @@ export const registerOwner = async (req, res, next) => {
       return next(new AppError("Invalid phone format", 400));
     }
 
-    const roleId = "9ad537de-b614-4faf-937a-51be5c52cb27";
+    const roleId = "1d62c6d0-c01f-41ba-b158-81f750f369ce";
 
     const existingRole = await prisma.role.findUnique({
       where: { id: roleId },
@@ -127,7 +127,7 @@ export const registerAdmin = async (req, res, next) => {
       return next(new AppError("Invalid phone format", 400));
     }
 
-    const roleId = "bd051127-e101-487b-8d65-9a71035c9e4c";
+    const roleId = "24c99fae-a0ab-4e91-a1c9-bcf6c8562ce0";
 
     const existingRole = await prisma.role.findUnique({
       where: { id: roleId },
@@ -165,12 +165,33 @@ export const registerAdmin = async (req, res, next) => {
       },
     });
 
+    const staffProfile = await prisma.staffProfile.create({
+      data: {
+        userId: newUser.id,
+        branchId: null,
+        baseSalary: 0,
+        hireDate: new Date(),
+        position: "Pending",
+        department: "Pending",
+        nationalId: {},
+      },
+    });
+
+    if (!staffProfile) {
+      return next(
+        new AppError("Failed to create staff profile for the admin user", 500),
+      );
+    }
+
     // eslint-disable-next-line no-unused-vars
     const { password: _, ...userWithoutPassword } = newUser;
 
     res.status(201).json({
-      status: "success",
+      success: true,
+      message:
+        "Admin registered successfully and created staff profile, please update your profile",
       data: userWithoutPassword,
+      staffProfile: staffProfile,
     });
   } catch (error) {
     next(error);
@@ -214,7 +235,7 @@ export const registerStaff = async (req, res, next) => {
       return next(new AppError("Branch does not exist", 400));
     }
 
-    const roleId = "2884d176-7c61-4b09-81d2-d6d7269d4ad1";
+    const roleId = "6cfd945d-addb-4e96-8e80-214aae372613";
 
     const existingRole = await prisma.role.findUnique({
       where: { id: roleId },
@@ -314,7 +335,7 @@ export const registerDeveloper = async (req, res, next) => {
       return next(new AppError("Invalid phone format", 400));
     }
 
-    const roleId = "022f21b0-c85d-4920-9cbb-34e2b7689666";
+    const roleId = "1e67eca1-c5f4-4de7-aa0a-a3fbb5d4cdf3";
 
     const existingRole = await prisma.role.findUnique({
       where: { id: roleId },

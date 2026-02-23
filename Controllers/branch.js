@@ -2,6 +2,12 @@ import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
 import { pagination } from "../utils/pagination.js";
 import { compressAndUpload } from "../utils/cloudinary.js";
+import {
+  incrementStorageUsage,
+  decrementStorageUsage,
+} from "../utils/storageUsage.js";
+import { invalidateCacheByPattern } from "../utils/cacheInvalidation.js";
+import { messages } from "../locales/message.js";
 
 const timeToDate = (time) => {
   return new Date(`2026-01-01T${time}:00.000Z`);
@@ -11,14 +17,23 @@ export const createBranch = async (req, res, next) => {
   try {
     const { name, address, businessId, openingTime, closingTime } = req.body;
 
-    for (const [key, value] of Object.entries({
+    const requiredFields = {
       name,
       address,
       businessId,
       openingTime,
       closingTime,
-    })) {
-      if (!value) return next(new AppError(`${key} is required`, 400));
+    };
+
+    for (let i in requiredFields) {
+      if (!requiredFields[i]) {
+        return next(
+          new AppError(
+            `${i.charAt(0).toUpperCase() + i.slice(1)} is required`,
+            400,
+          ),
+        );
+      }
     }
 
     const parseTimeToMinutes = (t) => {
@@ -41,18 +56,38 @@ export const createBranch = async (req, res, next) => {
 
     const uploadResult = await compressAndUpload(req.file.buffer, "branches");
 
-    const newBranch = await prisma.branch.create({
-      data: {
-        name,
-        address,
-        businessId,
-        image: uploadResult.secure_url,
-        openingTime: timeToDate(openingTime),
-        closingTime: timeToDate(closingTime),
-      },
-    });
+    const { incrementStorage, newBranch } = await prisma.$transaction(
+      async (tx) => {
+        const newBranch = await tx.branch.create({
+          data: {
+            name,
+            address,
+            businessId,
+            image: uploadResult.secure_url,
+            openingTime: timeToDate(openingTime),
+            closingTime: timeToDate(closingTime),
+          },
+        });
 
-    res.status(201).json({ status: "success", data: newBranch });
+        const incrementStorage = await incrementStorageUsage(
+          businessId,
+          "branches",
+          tx,
+        );
+
+        return { incrementStorage, newBranch };
+      },
+    );
+
+    await invalidateCacheByPattern(`branches:*businessId=${businessId}*`);
+    await invalidateCacheByPattern("businesses*");
+
+    res.status(201).json({
+      success: true,
+      message: "Branch created successfully",
+      data: newBranch,
+      storageUsage: incrementStorage,
+    });
   } catch (err) {
     next(err);
   }
@@ -71,7 +106,7 @@ export const getBranchById = async (req, res, next) => {
       return next(new AppError("Branch not found", 404));
     }
     res.status(200).json({
-      status: "success",
+      success: true,
       data: branch,
       source: "database",
     });
@@ -96,7 +131,7 @@ export const getAllBranches = async (req, res, next) => {
     }
     const totalPages = Math.ceil(total / limit);
     res.status(200).json({
-      status: "success",
+      success: true,
       data: branches,
       meta: {
         page,
@@ -137,7 +172,7 @@ export const getBranchesByBusinessId = async (req, res, next) => {
       return next(new AppError("No branches found for this business", 404));
     }
     res.status(200).json({
-      status: "success",
+      success: true,
       data: branches,
       meta: {
         total,
@@ -172,8 +207,11 @@ export const updateBranchById = async (req, res, next) => {
         address,
       },
     });
+
+    await invalidateCacheByPattern(`branch:*branchId=${branchId}*`);
+
     res.status(200).json({
-      status: "success",
+      success: true,
       data: updatedBranch,
       source: "database",
     });
@@ -231,8 +269,10 @@ export const updateBranchByIdPatch = async (req, res, next) => {
       data: updateData,
     });
 
+    await invalidateCacheByPattern(`branch:*branchId=${branchId}*`);
+
     res.status(200).json({
-      status: "success",
+      success: true,
       data: updatedBranch,
       source: "database",
     });
@@ -255,14 +295,23 @@ export const deleteBranchById = async (req, res, next) => {
       return next(new AppError("Branch not found", 404));
     }
 
-    await prisma.branch.delete({
-      where: { id: branchId },
+    await prisma.$transaction(async (tx) => {
+      await tx.branch.delete({
+        where: { id: branchId },
+      });
+
+      await decrementStorageUsage(branch.businessId, "branches", tx);
     });
 
+    await invalidateCacheByPattern(`branch:*branchId=${branchId}*`);
+    await invalidateCacheByPattern(
+      `branches:*businessId=${branch.businessId}*`,
+    );
+    await invalidateCacheByPattern("businesses*");
+
     res.status(200).json({
-      status: "success",
+      success: true,
       message: "Branch deleted successfully",
-      source: "database",
     });
   } catch (error) {
     next(error);
@@ -271,12 +320,19 @@ export const deleteBranchById = async (req, res, next) => {
 
 export const deleteAllBranches = async (req, res, next) => {
   try {
+    if (req.user.roleName !== "DEVELOPER") {
+      return next(new AppError(messages.FORBIDDEN.en, 403));
+    }
     const deletedBranches = await prisma.branch.deleteMany({});
     if (deletedBranches.count === 0) {
       return next(new AppError("No branches to delete", 404));
     }
+
+    await invalidateCacheByPattern(`branches:*`);
+    await invalidateCacheByPattern("businesses*");
+
     res.status(200).json({
-      status: "success",
+      success: true,
       message: "All branches deleted successfully",
       count: deletedBranches.count,
       source: "database",

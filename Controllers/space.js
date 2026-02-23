@@ -2,6 +2,10 @@ import { prisma } from "../configs/db.js";
 import { AppError } from "../utils/appError.js";
 import { pagination } from "../utils/pagination.js";
 import { compressAndUpload } from "../utils/cloudinary.js";
+import {
+  decrementStorageUsage,
+  incrementStorageUsage,
+} from "../utils/storageUsage.js";
 
 const SpaceType = ["PRIVATE", "PUBLIC", "DESK", "MEETING", "VIP", "OTHER"];
 
@@ -53,21 +57,35 @@ export const createSpace = async (req, res, next) => {
         return next(error);
       }
     }
+    ``;
 
-    const newSpace = await prisma.space.create({
-      data: {
-        branchId,
-        name,
-        type: normalizedType,
-        capacity,
-        isActive: isActive !== undefined ? isActive : true,
-        customTypeLabel,
-        image: imageUrl,
-      },
+    const { storageUsage, newSpace } = await prisma.$transaction(async (tx) => {
+      const storageUsage = await incrementStorageUsage(
+        existingBranch.businessId,
+        "spaces",
+        tx,
+      );
+
+      const newSpace = await tx.space.create({
+        data: {
+          branchId,
+          name,
+          type: normalizedType,
+          capacity,
+          isActive: isActive !== undefined ? isActive : true,
+          customTypeLabel,
+          image: imageUrl,
+        },
+      });
+
+      return { storageUsage, newSpace };
     });
+
     res.status(201).json({
       status: "success",
+      message: "Space created successfully",
       data: newSpace,
+      storageUsage,
     });
   } catch (error) {
     next(error);
@@ -211,13 +229,47 @@ export const deleteSpaceById = async (req, res, next) => {
     }
     const existingSpace = await prisma.space.findUnique({
       where: { id: spaceId },
+      include: {
+        branch: {
+          select: { businessId: true },
+        },
+      },
     });
     if (!existingSpace || existingSpace === 0) {
       return next(new AppError("Space not found", 404));
     }
-    await prisma.space.delete({
-      where: { id: spaceId },
+
+    await prisma.$transaction(async (tx) => {
+      // Count and delete devices in this space
+      const deviceCount = await tx.device.count({
+        where: { spaceId },
+      });
+
+      await tx.device.deleteMany({
+        where: { spaceId },
+      });
+
+      // Decrement storage for both devices and spaces
+      if (deviceCount > 0) {
+        await decrementStorageUsage(
+          existingSpace.branch.businessId,
+          "devices",
+          tx,
+          deviceCount,
+        );
+      }
+
+      await decrementStorageUsage(
+        existingSpace.branch.businessId,
+        "spaces",
+        tx,
+      );
+
+      await tx.space.delete({
+        where: { id: spaceId },
+      });
     });
+
     res
       .status(200)
       .json({ status: "success", message: "Space deleted successfully" });
@@ -243,14 +295,48 @@ export const deleteSpacesByBranchId = async (req, res, next) => {
     if (!existingBranch || existingBranch === 0) {
       return next(new AppError("Branch not found", 404));
     }
-    const result = await prisma.space.deleteMany({
-      where: { branchId },
-    });
-    if (!result.count || result.count === 0) {
-      return next(
-        new AppError("No space records to delete for this branch", 404),
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Count and delete all devices in spaces for this branch
+      const deviceCount = await tx.device.count({
+        where: {
+          space: { branchId },
+        },
+      });
+
+      await tx.device.deleteMany({
+        where: {
+          space: { branchId },
+        },
+      });
+
+      const result = await tx.space.deleteMany({
+        where: { branchId },
+      });
+
+      if (!result.count || result.count === 0) {
+        throw new AppError("No space records to delete for this branch", 404);
+      }
+
+      if (deviceCount > 0) {
+        await decrementStorageUsage(
+          existingBranch.businessId,
+          "devices",
+          tx,
+          deviceCount,
+        );
+      }
+
+      await decrementStorageUsage(
+        existingBranch.businessId,
+        "spaces",
+        tx,
+        result.count,
       );
-    }
+
+      return result;
+    });
+
     res.status(200).json({
       status: "success",
       message: `Deleted spaces Successfully`,

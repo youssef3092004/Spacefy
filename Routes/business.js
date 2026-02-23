@@ -44,7 +44,6 @@ router.get(
 router.put(
   "/update/:id",
   verifyToken,
-  cacheMiddleware((req) => `business:${req.params.id}`, "TTL_BY_ID"),
   checkPermission("UPDATE-BUSINESSES"),
   checkOwnership({ model: "business", paramId: "id", scope: "business" }),
   updateBusinessById,
