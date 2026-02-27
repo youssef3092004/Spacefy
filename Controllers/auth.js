@@ -99,9 +99,9 @@ export const registerOwner = async (req, res, next) => {
 
 export const registerAdmin = async (req, res, next) => {
   try {
-    const { name, phone, email, password } = req.body;
+    const { name, phone, email, password, branchId } = req.body;
 
-    const requiredFields = { name, phone, email, password };
+    const requiredFields = { name, phone, email, password, branchId };
 
     for (let i in requiredFields) {
       if (!requiredFields[i]) {
@@ -125,6 +125,13 @@ export const registerAdmin = async (req, res, next) => {
     }
     if (!isValidPhone(phone)) {
       return next(new AppError("Invalid phone format", 400));
+    }
+
+    const existingBranch = await prisma.branch.findUnique({
+      where: { id: branchId },
+    });
+    if (!existingBranch) {
+      return next(new AppError("Branch does not exist", 400));
     }
 
     const roleId = "24c99fae-a0ab-4e91-a1c9-bcf6c8562ce0";
@@ -167,13 +174,21 @@ export const registerAdmin = async (req, res, next) => {
 
     const staffProfile = await prisma.staffProfile.create({
       data: {
-        userId: newUser.id,
-        branchId: null,
         baseSalary: 0,
         hireDate: new Date(),
         position: "Pending",
         department: "Pending",
         nationalId: {},
+        user: {
+          connect: {
+            id: newUser.id,
+          },
+        },
+        branch: {
+          connect: {
+            id: branchId,
+          },
+        },
       },
     });
 

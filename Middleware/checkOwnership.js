@@ -16,6 +16,11 @@ export const checkOwnership = ({
       const userId = req.user.id;
       const roleName = req.user.roleName;
       const resourceId = req.params[paramId];
+      const allowedScopes = ["branch", "user", "business"];
+
+      if (!allowedScopes.includes(scope)) {
+        return next(new AppError(`Invalid ownership scope: ${scope}`, 500));
+      }
 
       if (!resourceId) {
         console.log("Missing resource ID in params:", req.params);
@@ -36,8 +41,11 @@ export const checkOwnership = ({
             ? { ownerId: true }
             : { userId: true, branchId: true };
 
+      const whereField =
+        model === "branch" || model === "business" ? "id" : paramId;
+
       const resource = await prisma[model].findUnique({
-        where: { id: resourceId },
+        where: { [whereField]: resourceId },
         select: selectFields,
       });
 

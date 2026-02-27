@@ -48,7 +48,7 @@ router.get(
   checkOwnership({
     model: "staffProfile",
     paramId: "id",
-    scope: "staffProfile",
+    scope: "branch",
   }),
   getStaffProfileById,
 );
@@ -74,7 +74,7 @@ router.put(
   checkOwnership({
     model: "staffProfile",
     paramId: "id",
-    scope: "staffProfile",
+    scope: "branch",
   }),
   updateStaffProfileById,
 );
@@ -85,7 +85,7 @@ router.delete(
   checkOwnership({
     model: "staffProfile",
     paramId: "id",
-    scope: "staffProfile",
+    scope: "branch",
   }),
   deleteStaffProfileById,
 );
@@ -106,7 +106,7 @@ router.get(
   checkOwnership({
     model: "staffProfile",
     paramId: "userId",
-    scope: "staffProfile",
+    scope: "branch",
   }),
   getStaffProfileByUserId,
 );
@@ -124,7 +124,7 @@ router.put(
   checkOwnership({
     model: "staffProfile",
     paramId: "userId",
-    scope: "staffProfile",
+    scope: "branch",
   }),
   updateStaffProfileByUserId,
 );
@@ -135,7 +135,7 @@ router.patch(
   checkOwnership({
     model: "staffProfile",
     paramId: "userId",
-    scope: "staffProfile",
+    scope: "branch",
   }),
   updateStaffProfileByUserIdPatch,
 );

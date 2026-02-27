@@ -1,5 +1,6 @@
 import { redisClient } from "../configs/redis.js";
 import process from "process";
+import { indexCacheKeyByRequest } from "../utils/cacheInvalidation.js";
 
 export const cacheMiddleware = (keyBuilder, type) => {
   return async (req, res, next) => {
@@ -27,6 +28,10 @@ export const cacheMiddleware = (keyBuilder, type) => {
           } else {
             redisClient.set(key, JSON.stringify(body));
           }
+
+          indexCacheKeyByRequest(req, key).catch((error) => {
+            console.error("Cache key indexing failed:", error);
+          });
         }
 
         return originalJson(body);

@@ -29,7 +29,7 @@ export const hasPermission = async (
           userId,
           branchId,
           permissionId: permission.id,
-        },
+        },                            
         select: { isAllowed: true },
       });
 

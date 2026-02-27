@@ -5,7 +5,9 @@ import {
   checkResourceCreationLimit,
   triggerStorageUsageUpdate,
   getAllBusinessesStorageUsage,
+  triggerWeeklyStorageSnapshot,
 } from "../controllers/storageUsage.js";
+import { verifyToken } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -40,5 +42,15 @@ router.post("/update/:businessId", triggerStorageUsageUpdate);
  * @desc Get storage usage for all businesses (admin only)
  */
 router.get("/admin/all", getAllBusinessesStorageUsage);
+
+/**
+ * @route POST /api/v1/storage-usage/admin/run-weekly-snapshot
+ * @desc Manually trigger weekly storage usage snapshots for all businesses
+ */
+router.post(
+  "/admin/run-weekly-snapshot",
+  verifyToken,
+  triggerWeeklyStorageSnapshot,
+);
 
 export default router;

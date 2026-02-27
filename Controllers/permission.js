@@ -71,11 +71,11 @@ export const getPermissionById = async (req, res, next) => {
 
 export const getAllPermissions = async (req, res, next) => {
   try {
-    if (req.user.roleName !== "DEVELOPER") {
-      return next(
-        new AppError("Forbidden: Only DEVELOPER can get permissions", 403),
-      );
-    }
+    // if (req.user.roleName !== "DEVELOPER") {
+    //   return next(
+    //     new AppError("Forbidden: Only DEVELOPER can get permissions", 403),
+    //   );
+    // }
     const { page, limit, skip, sort, order } = pagination(req);
 
     const [total, permissions] = await prisma.$transaction([

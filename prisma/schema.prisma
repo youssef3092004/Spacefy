@@ -104,6 +104,12 @@ enum PlanType {
   ENTERPRISE
 }
 
+enum VisitStatus {
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+
 // fix it to branch not business
 model BusinessSettings {
   id         String @id @default(uuid())
@@ -282,11 +288,12 @@ model Business {
   branches         Branch[]
   businessSettings BusinessSettings?
   storageUsage     StorageUsage?
+  customers        customer[]
 
   @@index([ownerId])
 }
 
-model Branch {npx prisma migrate reset
+model Branch {
   id          String    @id @default(uuid())
   businessId  String
   name        String
@@ -305,6 +312,7 @@ model Branch {npx prisma migrate reset
   devices               Device[]
   tools                 Tool[]
   BranchUserPermissions BranchUserPermission[]
+  visits                Visit[]
 
   // @@index([planId])
   @@index([businessId])
@@ -510,4 +518,44 @@ model StorageUsageHistory {
 
   @@index([storageUsageId])
   @@index([recordedAt])
+}
+
+model customer {
+  id         String   @id @default(uuid())
+  businessId String
+  seqNumber  Int      @unique
+  name       String
+  phone      String   @unique
+  email      String?  @unique
+  password   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  visits   Visit[]
+
+  @@index([phone])
+  @@index([email])
+}
+
+model Visit {
+  id         String    @id @default(uuid())
+  branchId   String
+  customerId String
+  startedAt  DateTime
+  endedAt    DateTime?
+
+  status VisitStatus
+
+  durationMinutes Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  customer customer @relation(fields: [customerId], references: [id])
+
+  @@index([branchId])
+  @@index([customerId])
+  @@index([branchId, status])
 }

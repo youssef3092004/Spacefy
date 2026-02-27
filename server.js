@@ -9,6 +9,8 @@ import { connectRedis } from "./configs/redis.js";
 import xss from "xss";
 import path from "path";
 import { fileURLToPath } from "url";
+import { startStorageUsageCron } from "./utils/storageUsageCron.js";
+import { autoInvalidateCache } from "./middleware/autoInvalidateCache.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -20,6 +22,7 @@ const PORT = process.env.PORT;
 // database connection
 await connectDB();
 await connectRedis();
+startStorageUsageCron();
 
 app.set("trust proxy", 1);
 
@@ -43,6 +46,8 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(autoInvalidateCache());
+
 // Routes
 import authRouter from "./routes/auth.js";
 import roleRouter from "./routes/role.js";
@@ -62,6 +67,7 @@ import toolRouter from "./routes/tools.js";
 import pricingRulesRouter from "./routes/pricingRules.js";
 import planRouter from "./routes/plan.js";
 import storageUsageRouter from "./routes/storageUsage.js";
+import customerRouter from "./routes/customer.js";
 
 import seedRouter from "./seeds/permissions.js";
 import getPermissionIdsByNameRouter from "./seeds/getPermissionsId.js";
@@ -84,6 +90,7 @@ app.use("/api/v1/tools", toolRouter);
 app.use("/api/v1/pricing-rules", pricingRulesRouter);
 app.use("/api/v1/plans", planRouter);
 app.use("/api/v1/storage-usage", storageUsageRouter);
+app.use("/api/v1/customers", customerRouter);
 
 app.use("/api/v1/seed-permissions", seedRouter);
 app.use("/api/v1/seed-permissions", getPermissionIdsByNameRouter);

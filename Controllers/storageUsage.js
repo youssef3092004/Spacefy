@@ -8,6 +8,7 @@ import {
   initializeStorageUsage,
 } from "../utils/storageUsage.js";
 import { messages } from "../locales/message.js";
+import { runWeeklyStorageUsageSnapshot } from "../utils/storageUsageCron.js";
 
 /**
  * Get storage usage summary for a business owner
@@ -251,6 +252,29 @@ export const getAllBusinessesStorageUsage = async (req, res, next) => {
       success: true,
       data: formatted,
       total: formatted.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Manually trigger weekly snapshot job for all businesses
+ * (DEVELOPER only)
+ */
+export const triggerWeeklyStorageSnapshot = async (req, res, next) => {
+  try {
+    if (!req.user || req.user.roleName !== "DEVELOPER") {
+      return next(new AppError(messages.FORBIDDEN.en, 403));
+    }
+
+    const result = await runWeeklyStorageUsageSnapshot();
+
+    res.status(200).json({
+      success: true,
+      message: "Weekly storage usage snapshot executed successfully",
+      data: result,
+      source: "manual-trigger",
     });
   } catch (error) {
     next(error);
